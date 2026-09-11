@@ -1,5 +1,7 @@
 import streamlit as st
 import os
+from PIL import Image
+import numpy as np
 import database as db
 import auth
 import utils
@@ -18,7 +20,40 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS, CARDS DE IMAGEM)
+# FUNÇÃO PARA REMOVER O FUNDO BRANCO DAS IMAGENS (TRANSPARÊNCIA)
+# ---------------------------------------------------------
+@st.cache_data
+def remove_white_background(image_path, threshold_low=220, threshold_high=250):
+    """
+    Carrega uma imagem JPG/PNG e converte pixels brancos e claros em transparência (Alpha).
+    """
+    if not os.path.exists(image_path):
+        return None
+    try:
+        img = Image.open(image_path).convert("RGBA")
+        arr = np.array(img, dtype=np.float32)
+        r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+        
+        # Média dos canais RGB para calcular o brilho
+        brightness = (r + g + b) / 3.0
+        
+        # Cria a máscara de transparência (Alpha)
+        alpha = np.ones_like(brightness) * 255.0
+        
+        # Pixels muito claros viram totalmente transparentes
+        alpha[brightness >= threshold_high] = 0
+        
+        # Suavização suave nas bordas (anti-aliasing)
+        mask = (brightness > threshold_low) & (brightness < threshold_high)
+        alpha[mask] = 255.0 * (1.0 - (brightness[mask] - threshold_low) / (threshold_high - threshold_low))
+        
+        arr[:, :, 3] = alpha
+        return Image.fromarray(arr.astype(np.uint8))
+    except Exception:
+        return Image.open(image_path)
+
+# ---------------------------------------------------------
+# ESTILIZAÇÃO CSS (TEMA ESCURO & LETRAS BRANCAS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -67,27 +102,12 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* ENQUADRAMENTO DA LOGO NO MENU LATERAL (Card Branco Polido) */
-    section[data-testid="stSidebar"] [data-testid="stImage"] {
-        background-color: #ffffff;
-        padding: 6px;
-        border-radius: 12px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-        margin-bottom: 12px;
-    }
-    section[data-testid="stSidebar"] [data-testid="stImage"] img {
-        border-radius: 8px;
-    }
-
-    /* ENQUADRAMENTO DA IMAGEM PRINCIPAL NA PÁGINA (Card Banner Elegante) */
-    .main [data-testid="stImage"] {
-        background-color: #ffffff;
-        padding: 10px;
-        border-radius: 16px;
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
-    }
-    .main [data-testid="stImage"] img {
-        border-radius: 12px;
+    /* GARANTE QUE NENHUM CONTAINER DE IMAGEM ADICIONE QUADRADO BRANCO */
+    [data-testid="stImage"] {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }
 
     /* Estilização do Botão Sair */
@@ -106,31 +126,31 @@ st.markdown("""
     /* Cartão Translúcido de Boas-Vindas */
     .welcome-card {
         position: relative;
-        margin-top: -110px;
+        margin-top: -60px;
         margin-left: auto;
         margin-right: auto;
         width: 85%;
         max-width: 600px;
-        background: rgba(255, 255, 255, 0.96);
-        backdrop-filter: blur(10px);
+        background: rgba(22, 27, 34, 0.90);
+        backdrop-filter: blur(12px);
         border-radius: 16px;
         padding: 24px;
         box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         text-align: center;
         z-index: 10;
-        color: #1f2937;
+        color: #ffffff;
     }
     
     .welcome-card h2 {
-        color: #111827 !important;
+        color: #ffffff !important;
         font-weight: 800;
         font-size: 26px;
         margin-bottom: 8px;
     }
     
     .welcome-card p {
-        color: #374151 !important;
+        color: #e5e7eb !important;
         font-size: 15px;
         margin-bottom: 6px;
     }
@@ -185,7 +205,9 @@ with st.sidebar:
                 break
 
     if os.path.exists(logo_file):
-        st.image(logo_file, use_container_width=True)
+        logo_transparent = remove_white_background(logo_file, threshold_low=210, threshold_high=245)
+        if logo_transparent:
+            st.image(logo_transparent, use_container_width=True)
     
     st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
@@ -234,13 +256,15 @@ if menu == "🏠 Início":
                 break
 
     if os.path.exists(home_file):
-        st.image(home_file, use_container_width=True)
+        home_transparent = remove_white_background(home_file, threshold_low=225, threshold_high=250)
+        if home_transparent:
+            st.image(home_transparent, use_container_width=True)
     
     st.markdown("""
         <div class="welcome-card">
             <h2>Bem-vindo ao CALC MARKUP</h2>
             <p>Sua ferramenta inteligente para precificar importações.</p>
-            <p style="font-size: 13px; color: #6b7280;">Clique em <b>'🛒 Cadastrar Produto'</b> no menu lateral para começar.</p>
+            <p style="font-size: 13px; color: #9ca3af;">Clique em <b>'🛒 Cadastrar Produto'</b> no menu lateral para começar.</p>
         </div>
     """, unsafe_allow_html=True)
 
