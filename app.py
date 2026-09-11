@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 import database as db
 import auth
@@ -20,40 +20,57 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# FUNÇÃO PARA REMOVER O FUNDO BRANCO DAS IMAGENS (TRANSPARÊNCIA)
+# RECORTE HD DE ALTA PRECISÃO (SEM SERRILHADO / SEM HALO BRANCO)
 # ---------------------------------------------------------
 @st.cache_data
-def remove_white_background(image_path, threshold_low=220, threshold_high=250):
+def remove_white_background_hd(image_path, bg_threshold=32, choke=2, blur=1):
     """
-    Carrega uma imagem JPG/PNG e converte pixels brancos e claros em transparência (Alpha).
+    Remove o fundo branco de imagens JPG/PNG com acabamento HD profissional:
+    - Choke: Elimina o 'halo' e o serrilhado branco das bordas recortando o ruído de compressão.
+    - Defringing: Escurece a transparência limítrofe para fusão perfeita em temas escuros.
+    - Suavização: Garante curvas perfeitas em contornos complexos.
     """
     if not os.path.exists(image_path):
         return None
     try:
         img = Image.open(image_path).convert("RGBA")
         arr = np.array(img, dtype=np.float32)
+        
         r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
         
-        # Média dos canais RGB para calcular o brilho
-        brightness = (r + g + b) / 3.0
+        # Distância euclidiana em relação ao branco puro (255, 255, 255)
+        white_dist = np.sqrt((255.0 - r)**2 + (255.0 - g)**2 + (255.0 - b)**2)
         
-        # Cria a máscara de transparência (Alpha)
-        alpha = np.ones_like(brightness) * 255.0
+        # Transição de máscara entre o fundo branco e o objeto
+        t1 = bg_threshold
+        t2 = bg_threshold + 40.0
         
-        # Pixels muito claros viram totalmente transparentes
-        alpha[brightness >= threshold_high] = 0
+        alpha = np.clip((white_dist - t1) / (t2 - t1), 0.0, 1.0) * 255.0
+        alpha_img = Image.fromarray(alpha.astype(np.uint8), mode="L")
         
-        # Suavização suave nas bordas (anti-aliasing)
-        mask = (brightness > threshold_low) & (brightness < threshold_high)
-        alpha[mask] = 255.0 * (1.0 - (brightness[mask] - threshold_low) / (threshold_high - threshold_low))
+        # Choke / Erosão de máscara para remover bordas denteadas
+        for _ in range(choke):
+            alpha_img = alpha_img.filter(ImageFilter.MinFilter(3))
+            
+        # Suavização Gaussiana nas bordas
+        if blur > 0:
+            alpha_img = alpha_img.filter(ImageFilter.GaussianBlur(blur))
+            
+        final_alpha = np.array(alpha_img, dtype=np.float32)
         
-        arr[:, :, 3] = alpha
-        return Image.fromarray(arr.astype(np.uint8))
+        # DEFRINGING: Escurece contornos semi-transparentes para evitar brilho branco em fundo escuro
+        factor = np.power(final_alpha / 255.0, 0.6)
+        for i in range(3):
+            arr[:, :, i] = arr[:, :, i] * factor
+            
+        arr[:, :, 3] = final_alpha
+        
+        return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
     except Exception:
         return Image.open(image_path)
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO & LETRAS BRANCAS)
+# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS & SOMBRAS 3D)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -102,12 +119,19 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* GARANTE QUE NENHUM CONTAINER DE IMAGEM ADICIONE QUADRADO BRANCO */
+    /* IMAGENS FLUTUANTES COM SOMBRA PROJETADA DE ALTA QUALIDADE */
     [data-testid="stImage"] {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
+        display: flex;
+        justify-content: center;
+    }
+
+    [data-testid="stImage"] img {
+        background-color: transparent !important;
+        filter: drop-shadow(0px 8px 18px rgba(0, 0, 0, 0.7));
     }
 
     /* Estilização do Botão Sair */
@@ -126,17 +150,17 @@ st.markdown("""
     /* Cartão Translúcido de Boas-Vindas */
     .welcome-card {
         position: relative;
-        margin-top: -60px;
+        margin-top: -45px;
         margin-left: auto;
         margin-right: auto;
         width: 85%;
-        max-width: 600px;
-        background: rgba(22, 27, 34, 0.90);
+        max-width: 620px;
+        background: rgba(22, 27, 34, 0.92);
         backdrop-filter: blur(12px);
         border-radius: 16px;
         padding: 24px;
-        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         text-align: center;
         z-index: 10;
         color: #ffffff;
@@ -205,9 +229,9 @@ with st.sidebar:
                 break
 
     if os.path.exists(logo_file):
-        logo_transparent = remove_white_background(logo_file, threshold_low=210, threshold_high=245)
-        if logo_transparent:
-            st.image(logo_transparent, use_container_width=True)
+        logo_hd = remove_white_background_hd(logo_file, bg_threshold=28, choke=2, blur=1)
+        if logo_hd:
+            st.image(logo_hd, use_container_width=True)
     
     st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
@@ -256,9 +280,9 @@ if menu == "🏠 Início":
                 break
 
     if os.path.exists(home_file):
-        home_transparent = remove_white_background(home_file, threshold_low=225, threshold_high=250)
-        if home_transparent:
-            st.image(home_transparent, use_container_width=True)
+        home_hd = remove_white_background_hd(home_file, bg_threshold=32, choke=2, blur=1)
+        if home_hd:
+            st.image(home_hd, use_container_width=True)
     
     st.markdown("""
         <div class="welcome-card">
