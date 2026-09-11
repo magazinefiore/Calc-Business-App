@@ -230,16 +230,21 @@ with st.sidebar:
 # ---------------------------------------------------------
 # PÁGINAS DO SISTEMA
 # ---------------------------------------------------------
-
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    home_img = load_png_image("Página de Abertura do App.png")
-    if not home_img:
-        home_img = load_png_image("home.png")
-        
-    if home_img:
-        st.image(home_img, use_container_width=True)
+    # Chamada atualizada com o novo nome simplificado "abertura.png"
+    try:
+        home_img = load_png_image("abertura.png")
+        if not home_img:
+            home_img = load_png_image("home.png")
+            
+        if home_img:
+            st.image(home_img, use_container_width=True)
+        else:
+            st.warning("Imagem de abertura não encontrada.")
+    except Exception:
+        st.warning("Erro ao carregar a imagem de abertura.")
     
     st.markdown("""
         <div class="welcome-card">
