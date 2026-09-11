@@ -18,7 +18,7 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO + CARD TRANSLÚCIDO E LOGO)
+# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS E MISTURA DE IMAGEM)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -28,26 +28,63 @@ st.markdown("""
         color: #ffffff;
     }
     
-    /* Estilização do Menu Lateral */
+    /* Estilização da Barra Lateral (Sidebar) */
     section[data-testid="stSidebar"] {
         background-color: #161b22;
         border-right: 1px solid #30363d;
     }
-    
-    /* Título no Menu Lateral */
+
+    /* FORÇAR COR BRANCA EM TODOS OS TEXTOS DO MENU LATERAL */
+    section[data-testid="stSidebar"] *, 
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] div,
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        color: #ffffff !important;
+    }
+
+    /* Legendas e Subtítulos em Tom Claro */
+    section[data-testid="stSidebar"] .stCaption,
+    section[data-testid="stSidebar"] caption {
+        color: #9ca3af !important;
+    }
+
+    /* Título e Subtítulo da Marca no Menu */
     .sidebar-title {
         font-size: 22px;
         font-weight: bold;
-        color: #ffffff;
+        color: #ffffff !important;
         text-align: center;
-        margin-top: 5px;
-        margin-bottom: 0px;
+        margin-top: 10px;
+        margin-bottom: 2px;
     }
     .sidebar-subtitle {
-        font-size: 12px;
-        color: #8b949e;
+        font-size: 13px;
+        color: #38bdf8 !important;
         text-align: center;
         margin-bottom: 15px;
+        font-weight: 600;
+    }
+
+    /* REMOVE O FUNDO BRANCO DAS IMAGENS NO MENU LATERAL */
+    section[data-testid="stSidebar"] img {
+        border-radius: 8px;
+        mix-blend-mode: multiply;
+        background-color: transparent !important;
+    }
+
+    /* Estilização do Botão Sair */
+    section[data-testid="stSidebar"] .stButton>button {
+        background-color: #21262d !important;
+        color: #ffffff !important;
+        border: 1px solid #30363d !important;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    section[data-testid="stSidebar"] .stButton>button:hover {
+        background-color: #30363d !important;
+        border-color: #8b949e !important;
     }
 
     /* Cartão Translúcido de Boas-Vindas */
@@ -58,12 +95,12 @@ st.markdown("""
         margin-right: auto;
         width: 85%;
         max-width: 600px;
-        background: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
         border-radius: 16px;
         padding: 25px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         text-align: center;
         z-index: 10;
         color: #1f2937;
@@ -77,15 +114,9 @@ st.markdown("""
     }
     
     .welcome-card p {
-        color: #4b5563 !important;
+        color: #374151 !important;
         font-size: 15px;
         margin-bottom: 8px;
-    }
-
-    /* Botões personalização */
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -94,7 +125,6 @@ st.markdown("""
 # GERENCIAMENTO SEGURO DE LOGIN
 # ---------------------------------------------------------
 def render_login_screen():
-    """Chama a função de login disponível no módulo auth ou exibe login padrão."""
     if hasattr(auth, 'login_page'):
         auth.login_page()
     elif hasattr(auth, 'render_login'):
