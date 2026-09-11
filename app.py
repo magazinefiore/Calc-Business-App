@@ -18,11 +18,11 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS E MISTURA DE IMAGEM)
+# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS, CARDS DE IMAGEM)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
-    /* Fundo Escuro Principal */
+    /* Fundo Escuro Principal da Aplicação */
     .stApp {
         background-color: #0e1117;
         color: #ffffff;
@@ -67,11 +67,27 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* REMOVE O FUNDO BRANCO DAS IMAGENS NO MENU LATERAL */
-    section[data-testid="stSidebar"] img {
+    /* ENQUADRAMENTO DA LOGO NO MENU LATERAL (Card Branco Polido) */
+    section[data-testid="stSidebar"] [data-testid="stImage"] {
+        background-color: #ffffff;
+        padding: 6px;
+        border-radius: 12px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+        margin-bottom: 12px;
+    }
+    section[data-testid="stSidebar"] [data-testid="stImage"] img {
         border-radius: 8px;
-        mix-blend-mode: multiply;
-        background-color: transparent !important;
+    }
+
+    /* ENQUADRAMENTO DA IMAGEM PRINCIPAL NA PÁGINA (Card Banner Elegante) */
+    .main [data-testid="stImage"] {
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 16px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+    }
+    .main [data-testid="stImage"] img {
+        border-radius: 12px;
     }
 
     /* Estilização do Botão Sair */
@@ -90,17 +106,17 @@ st.markdown("""
     /* Cartão Translúcido de Boas-Vindas */
     .welcome-card {
         position: relative;
-        margin-top: -140px;
+        margin-top: -110px;
         margin-left: auto;
         margin-right: auto;
         width: 85%;
         max-width: 600px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.96);
         backdrop-filter: blur(10px);
         border-radius: 16px;
-        padding: 25px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 24px;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.3);
         text-align: center;
         z-index: 10;
         color: #1f2937;
@@ -110,13 +126,13 @@ st.markdown("""
         color: #111827 !important;
         font-weight: 800;
         font-size: 26px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     
     .welcome-card p {
         color: #374151 !important;
         font-size: 15px;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     </style>
 """, unsafe_allow_html=True)
