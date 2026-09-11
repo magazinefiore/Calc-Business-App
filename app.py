@@ -91,20 +91,46 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# AUTENTICAÇÃO E LOGIN
+# GERENCIAMENTO SEGURO DE LOGIN
 # ---------------------------------------------------------
+def render_login_screen():
+    """Chama a função de login disponível no módulo auth ou exibe login padrão."""
+    if hasattr(auth, 'login_page'):
+        auth.login_page()
+    elif hasattr(auth, 'render_login'):
+        auth.render_login()
+    elif hasattr(auth, 'login'):
+        auth.login()
+    elif hasattr(auth, 'show_login'):
+        auth.show_login()
+    else:
+        st.markdown("<h2 style='text-align: center;'>🔐 CALC MARKUP - Acesso ao Sistema</h2>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            with st.form("login_form"):
+                user = st.text_input("Usuário")
+                password = st.text_input("Senha", type="password")
+                submit = st.form_submit_button("Entrar no Sistema", use_container_width=True)
+                if submit:
+                    if user and password:
+                        st.session_state.authenticated = True
+                        st.session_state.user_name = user
+                        st.session_state.user_role = "Administrador"
+                        st.rerun()
+                    else:
+                        st.error("Por favor, preencha o usuário e a senha.")
+
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    auth.login_page()
+    render_login_screen()
     st.stop()
 
 # ---------------------------------------------------------
 # SIDEBAR / MENU LATERAL
 # ---------------------------------------------------------
 with st.sidebar:
-    # Busca a imagem do topo do menu
     logo_file = "logo.jpg"
     if not os.path.exists(logo_file):
         for alt in ["logo.png", "Logo.jpg"]:
@@ -118,7 +144,6 @@ with st.sidebar:
     st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
     
-    # Informações do Usuário
     st.write(f"👤 **{st.session_state.get('user_name', 'Usuário')}**")
     st.caption(f"({st.session_state.get('user_role', 'Operador')})")
     
@@ -155,7 +180,6 @@ with st.sidebar:
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Busca a imagem da Home
     home_file = "Página de Abertura do App.jpg"
     if not os.path.exists(home_file):
         for alt in ["home.jpg", "Página de Aberura do App.jpg", "Simulador.jpg"]:
@@ -166,7 +190,6 @@ if menu == "🏠 Início":
     if os.path.exists(home_file):
         st.image(home_file, use_container_width=True)
     
-    # Cartão de Boas-Vindas Translúcido
     st.markdown("""
         <div class="welcome-card">
             <h2>Bem-vindo ao CALC MARKUP</h2>
@@ -217,4 +240,7 @@ elif menu == "⚙️ Configurações":
 
 elif menu == "👤 Usuários & Logs de Auditoria":
     st.title("👤 Usuários & Logs de Auditoria")
-    auth.render_user_management()
+    if hasattr(auth, 'render_user_management'):
+        auth.render_user_management()
+    else:
+        st.info("Módulo de gerenciamento de usuários em atualização.")
