@@ -1,7 +1,6 @@
 import streamlit as st
 import os
-from PIL import Image, ImageFilter
-import numpy as np
+from PIL import Image
 import database as db
 import auth
 import utils
@@ -20,57 +19,28 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# RECORTE HD DE ALTA PRECISÃO (SEM SERRILHADO / SEM HALO BRANCO)
+# CARREGAMENTO DIRETO DE IMAGENS PNG (TRANSPARÊNCIA NATIVA)
 # ---------------------------------------------------------
 @st.cache_data
-def remove_white_background_hd(image_path, bg_threshold=32, choke=2, blur=1):
+def load_png_image(image_filename):
     """
-    Remove o fundo branco de imagens JPG/PNG com acabamento HD profissional:
-    - Choke: Elimina o 'halo' e o serrilhado branco das bordas recortando o ruído de compressão.
-    - Defringing: Escurece a transparência limítrofe para fusão perfeita em temas escuros.
-    - Suavização: Garante curvas perfeitas em contornos complexos.
+    Carrega imagens PNG com fundo transparente nativo sem aplicar filtros.
+    Suporta variações de nome (.png, .PNG).
     """
-    if not os.path.exists(image_path):
-        return None
-    try:
-        img = Image.open(image_path).convert("RGBA")
-        arr = np.array(img, dtype=np.float32)
-        
-        r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
-        
-        # Distância euclidiana em relação ao branco puro (255, 255, 255)
-        white_dist = np.sqrt((255.0 - r)**2 + (255.0 - g)**2 + (255.0 - b)**2)
-        
-        # Transição de máscara entre o fundo branco e o objeto
-        t1 = bg_threshold
-        t2 = bg_threshold + 40.0
-        
-        alpha = np.clip((white_dist - t1) / (t2 - t1), 0.0, 1.0) * 255.0
-        alpha_img = Image.fromarray(alpha.astype(np.uint8), mode="L")
-        
-        # Choke / Erosão de máscara para remover bordas denteadas
-        for _ in range(choke):
-            alpha_img = alpha_img.filter(ImageFilter.MinFilter(3))
-            
-        # Suavização Gaussiana nas bordas
-        if blur > 0:
-            alpha_img = alpha_img.filter(ImageFilter.GaussianBlur(blur))
-            
-        final_alpha = np.array(alpha_img, dtype=np.float32)
-        
-        # DEFRINGING: Escurece contornos semi-transparentes para evitar brilho branco em fundo escuro
-        factor = np.power(final_alpha / 255.0, 0.6)
-        for i in range(3):
-            arr[:, :, i] = arr[:, :, i] * factor
-            
-        arr[:, :, 3] = final_alpha
-        
-        return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-    except Exception:
-        return Image.open(image_path)
+    base_name = os.path.splitext(image_filename)[0]
+    extensions = ['.png', '.PNG', '.jpg', '.JPG', '.jpeg']
+    
+    for ext in extensions:
+        file_path = base_name + ext
+        if os.path.exists(file_path):
+            try:
+                return Image.open(file_path)
+            except Exception:
+                pass
+    return None
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO, LETRAS BRANCAS & SOMBRAS 3D)
+# ESTILIZAÇÃO CSS (TEMA ESCURO, TEXTOS BRANCOS & DESTAQUE DE IMAGEM)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -119,7 +89,7 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* IMAGENS FLUTUANTES COM SOMBRA PROJETADA DE ALTA QUALIDADE */
+    /* CENTRALIZAÇÃO E DESIGN DAS IMAGENS PNG */
     [data-testid="stImage"] {
         background-color: transparent !important;
         border: none !important;
@@ -131,7 +101,7 @@ st.markdown("""
 
     [data-testid="stImage"] img {
         background-color: transparent !important;
-        filter: drop-shadow(0px 8px 18px rgba(0, 0, 0, 0.7));
+        border-radius: 0px;
     }
 
     /* Estilização do Botão Sair */
@@ -150,7 +120,7 @@ st.markdown("""
     /* Cartão Translúcido de Boas-Vindas */
     .welcome-card {
         position: relative;
-        margin-top: -45px;
+        margin-top: -35px;
         margin-left: auto;
         margin-right: auto;
         width: 85%;
@@ -221,17 +191,9 @@ if not st.session_state.authenticated:
 # SIDEBAR / MENU LATERAL
 # ---------------------------------------------------------
 with st.sidebar:
-    logo_file = "logo.jpg"
-    if not os.path.exists(logo_file):
-        for alt in ["logo.png", "Logo.jpg"]:
-            if os.path.exists(alt):
-                logo_file = alt
-                break
-
-    if os.path.exists(logo_file):
-        logo_hd = remove_white_background_hd(logo_file, bg_threshold=28, choke=2, blur=1)
-        if logo_hd:
-            st.image(logo_hd, use_container_width=True)
+    logo_img = load_png_image("logo.png")
+    if logo_img:
+        st.image(logo_img, use_container_width=True)
     
     st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
@@ -272,17 +234,12 @@ with st.sidebar:
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    home_file = "Página de Abertura do App.jpg"
-    if not os.path.exists(home_file):
-        for alt in ["home.jpg", "Página de Aberura do App.jpg", "Simulador.jpg"]:
-            if os.path.exists(alt):
-                home_file = alt
-                break
-
-    if os.path.exists(home_file):
-        home_hd = remove_white_background_hd(home_file, bg_threshold=32, choke=2, blur=1)
-        if home_hd:
-            st.image(home_hd, use_container_width=True)
+    home_img = load_png_image("Página de Abertura do App.png")
+    if not home_img:
+        home_img = load_png_image("home.png")
+        
+    if home_img:
+        st.image(home_img, use_container_width=True)
     
     st.markdown("""
         <div class="welcome-card">
