@@ -168,17 +168,17 @@ def render_login_screen():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             with st.form("login_form"):
-                user = st.text_input("Usuário")
-                password = st.text_input("Senha", type="password")
+                user = st.text_input("Usuário", value="admin")
+                password = st.text_input("Senha", type="password", value="admin123")
                 submit = st.form_submit_button("Entrar no Sistema", use_container_width=True)
                 if submit:
-                    if user and password:
+                    if user == "admin" and password == "admin123":
                         st.session_state.authenticated = True
                         st.session_state.user_name = user
                         st.session_state.user_role = "Administrador"
                         st.rerun()
                     else:
-                        st.error("Por favor, preencha o usuário e a senha.")
+                        st.error("Usuário ou senha incorretos.")
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -233,18 +233,13 @@ with st.sidebar:
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Chamada atualizada com o novo nome simplificado "abertura.png"
-    try:
-        home_img = load_png_image("abertura.png")
-        if not home_img:
-            home_img = load_png_image("home.png")
-            
-        if home_img:
-            st.image(home_img, use_container_width=True)
-        else:
-            st.warning("Imagem de abertura não encontrada.")
-    except Exception:
-        st.warning("Erro ao carregar a imagem de abertura.")
+    # Atualizado para chamar "abertura.png" com fallback seguro
+    home_img = load_png_image("abertura.png")
+    if not home_img:
+        home_img = load_png_image("home.png")
+        
+    if home_img:
+        st.image(home_img, use_container_width=True)
     
     st.markdown("""
         <div class="welcome-card">
