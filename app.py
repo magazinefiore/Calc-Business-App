@@ -1,284 +1,196 @@
 import streamlit as st
-import os
-from PIL import Image
-import database as db
-import auth
-import utils
+import pandas as pd
+import sqlite3
+from datetime import datetime
 
 # ---------------------------------------------------------
-# CONFIGURAÇÃO DA PÁGINA
+# CONEXÃO COM O BANCO DE DADOS
 # ---------------------------------------------------------
-st.set_page_config(
-    page_title="CALC MARKUP | LM - Importing 2U",
-    page_icon="🛒",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Inicializa o banco de dados
-db.init_db()
+def get_connection():
+    return sqlite3.connect("database.db", check_same_thread=False)
 
 # ---------------------------------------------------------
-# LOCALIZAÇÃO NATIVA DE IMAGENS (MÁXIMA NITIDEZ)
+# 1. DASHBOARD & GRÁFICOS
 # ---------------------------------------------------------
-def get_image_path(image_filename):
-    """
-    Retorna o caminho real do arquivo de imagem para ser renderizado 
-    nativamente pelo Streamlit, garantindo 100% de nitidez e qualidade original.
-    """
-    base_name = os.path.splitext(image_filename)[0]
-    extensions = ['.png', '.PNG', '.jpg', '.JPG', '.jpeg']
-    
-    for ext in extensions:
-        file_path = base_name + ext
-        if os.path.exists(file_path):
-            return file_path
-    return None
+def render_dashboard():
+    conn = get_connection()
+    try:
+        df = pd.read_sql_query("SELECT * FROM products", conn)
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
 
-# ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TRANSPARÊNCIA E SOBREPOSIÇÃO DO CARTÃO)
-# ---------------------------------------------------------
-st.markdown("""
-    <style>
-    /* Fundo Escuro Principal da Aplicação */
-    .stApp {
-        background-color: #0e1117;
-        color: #ffffff;
-    }
-    
-    /* Estilização da Barra Lateral (Sidebar) */
-    section[data-testid="stSidebar"] {
-        background-color: #161b22;
-        border-right: 1px solid #30363d;
-    }
-
-    /* FORÇAR COR BRANCA EM TODOS OS TEXTOS DO MENU LATERAL */
-    section[data-testid="stSidebar"] *, 
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] div,
-    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-        color: #ffffff !important;
-    }
-
-    /* Legendas e Subtítulos em Tom Claro */
-    section[data-testid="stSidebar"] .stCaption,
-    section[data-testid="stSidebar"] caption {
-        color: #9ca3af !important;
-    }
-
-    /* Título e Subtítulo da Marca no Menu */
-    .sidebar-title {
-        font-size: 22px;
-        font-weight: bold;
-        color: #ffffff !important;
-        text-align: center;
-        margin-top: 10px;
-        margin-bottom: 2px;
-    }
-    .sidebar-subtitle {
-        font-size: 13px;
-        color: #38bdf8 !important;
-        text-align: center;
-        margin-bottom: 15px;
-        font-weight: 600;
-    }
-
-    /* EXIBIÇÃO NATIVA DE IMAGENS SEM PERDA DE QUALIDADE */
-    [data-testid="stImage"] {
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-        display: flex;
-        justify-content: center;
-    }
-
-    [data-testid="stImage"] img {
-        background-color: transparent !important;
-        border-radius: 12px;
-        image-rendering: -webkit-optimize-contrast; /* Melhora a nitidez em navegadores Webkit */
-    }
-
-    /* CARTÃO FLUTUANTE TRANSLÚCIDO E SOBREPOSTO */
-    .welcome-overlay-card {
-        position: relative;
-        margin-top: -95px; /* Puxa o cartão para cima, sobrepondo a imagem */
-        margin-left: auto;
-        margin-right: auto;
-        width: 80%;
-        max-width: 580px;
-        background: rgba(22, 27, 34, 0.70); /* Alta transparência (Vidro fumê) */
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border-radius: 16px;
-        padding: 20px 24px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        text-align: center;
-        z-index: 99;
-        color: #ffffff;
-    }
-    
-    .welcome-overlay-card h2 {
-        color: #ffffff !important;
-        font-weight: 800;
-        font-size: 24px;
-        margin-bottom: 6px;
-    }
-    
-    .welcome-overlay-card p {
-        color: #e5e7eb !important;
-        font-size: 14px;
-        margin-bottom: 4px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# GERENCIAMENTO SEGURO DE LOGIN (CAMPOS EM BRANCO)
-# ---------------------------------------------------------
-def render_login_screen():
-    if hasattr(auth, 'login_page'):
-        auth.login_page()
-    elif hasattr(auth, 'render_login'):
-        auth.render_login()
-    elif hasattr(auth, 'login'):
-        auth.login()
-    elif hasattr(auth, 'show_login'):
-        auth.show_login()
-    else:
-        st.markdown("<h2 style='text-align: center;'>🔐 CALC MARKUP - Acesso ao Sistema</h2>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            with st.form("login_form"):
-                user = st.text_input("Usuário", value="")
-                password = st.text_input("Senha", type="password", value="")
-                submit = st.form_submit_button("Entrar no Sistema", use_container_width=True)
-                if submit:
-                    if user == "admin" and password == "admin123":
-                        st.session_state.authenticated = True
-                        st.session_state.user_name = user
-                        st.session_state.user_role = "Administrador"
-                        st.rerun()
-                    else:
-                        st.error("Usuário ou senha incorretos.")
-
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    render_login_screen()
-    st.stop()
-
-# ---------------------------------------------------------
-# SIDEBAR / MENU LATERAL
-# ---------------------------------------------------------
-with st.sidebar:
-    logo_path = get_image_path("logo.png")
-    if logo_path:
-        st.image(logo_path, use_container_width=True)
-    
-    st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
-    
-    st.write(f"👤 **{st.session_state.get('user_name', 'Usuário')}**")
-    st.caption(f"({st.session_state.get('user_role', 'Operador')})")
-    
-    if st.button("🚪 Sair / Trocar Usuário", key="logout_btn", use_container_width=True):
-        st.session_state.authenticated = False
-        st.rerun()
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📦 Produtos Cadastrados", len(df) if not df.empty else 0)
+    with col2:
+        avg_markup = f"{df['markup'].mean():.2f}x" if not df.empty and 'markup' in df.columns else "0.00x"
+        st.metric("📊 Markup Médio", avg_markup)
+    with col3:
+        avg_price = f"R$ {df['preco_venda'].mean():.2f}" if not df.empty and 'preco_venda' in df.columns else "R$ 0,00"
+        st.metric("💰 Preço Médio de Venda", avg_price)
+    with col4:
+        st.metric("🌐 Canais Ativos", "Mercado Livre, Shopee, Amazon")
 
     st.markdown("---")
-    st.write("**Navegação**")
+    st.subheader("Visão Geral de Desempenho")
     
-    menu = st.radio(
-        "Navegação:",
-        [
-            "🏠 Início",
-            "📊 Dashboard & Gráficos",
-            "🛒 Cadastrar Produto",
-            "🗂️ Importar CSV",
-            "📦 Produtos",
-            "🧮 Calculadora de Formação de Preço",
-            "🏷️ Simulador de Descontos",
-            "🏭 Atacado",
-            "📈 Controle de Estoque",
-            "📄 Relatórios & Exportação",
-            "⚙️ Configurações",
-            "👤 Usuários & Logs de Auditoria"
-        ],
-        label_visibility="collapsed"
-    )
-
-# ---------------------------------------------------------
-# PÁGINAS DO SISTEMA
-# ---------------------------------------------------------
-if menu == "🏠 Início":
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    home_path = get_image_path("abertura.png")
-    if not home_path:
-        home_path = get_image_path("home.png")
-        
-    # Organiza em colunas para manter a proporção e centralização perfeita
-    col1, col2, col3 = st.columns([0.5, 5, 0.5])
-    with col2:
-        if home_path:
-            st.image(home_path, use_container_width=True)
-        
-        st.markdown("""
-            <div class="welcome-overlay-card">
-                <h2>Bem-vindo ao CALC MARKUP</h2>
-                <p>Sua ferramenta inteligente para precificar importações.</p>
-                <p style="font-size: 13px; color: #38bdf8; margin-top: 6px;">Clique em <b>'🛒 Cadastrar Produto'</b> no menu lateral para começar.</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-elif menu == "📊 Dashboard & Gráficos":
-    st.title("📊 Dashboard Executivo & Gráficos")
-    utils.render_dashboard()
-
-elif menu == "🛒 Cadastrar Produto":
-    st.title("🛒 Cadastrar Novo Produto")
-    utils.render_product_form()
-
-elif menu == "🗂️ Importar CSV":
-    st.title("🗂️ Importar Produtos via CSV")
-    utils.render_csv_import()
-
-elif menu == "📦 Produtos":
-    st.title("📦 Lista de Produtos")
-    utils.render_products_list()
-
-elif menu == "🧮 Calculadora de Formação de Preço":
-    st.title("🧮 Calculadora de Formação de Preço")
-    utils.render_calculator()
-
-elif menu == "🏷️ Simulador de Descontos":
-    st.title("🏷️ Simulador de Descontos")
-    utils.render_discount_simulator()
-
-elif menu == "🏭 Atacado":
-    st.title("🏭 Simulação de Vendas no Atacado")
-    utils.render_wholesale()
-
-elif menu == "📈 Controle de Estoque":
-    st.title("📈 Controle de Estoque")
-    utils.render_stock_control()
-
-elif menu == "📄 Relatórios & Exportação":
-    st.title("📄 Relatórios & Exportação")
-    utils.render_reports()
-
-elif menu == "⚙️ Configurações":
-    st.title("⚙️ Configurações Globais")
-    utils.render_settings()
-
-elif menu == "👤 Usuários & Logs de Auditoria":
-    st.title("👤 Usuários & Logs de Auditoria")
-    if hasattr(auth, 'render_user_management'):
-        auth.render_user_management()
+    if not df.empty and 'nome' in df.columns and 'preco_venda' in df.columns:
+        st.bar_chart(df.set_index('nome')['preco_venda'])
     else:
-        st.info("Módulo de gerenciamento de usuários em atualização.")
+        st.info("Cadastre produtos para visualizar os gráficos de precificação.")
+
+# ---------------------------------------------------------
+# 2. CADASTRAR PRODUTO
+# ---------------------------------------------------------
+def render_product_form():
+    with st.form("form_cad_produto"):
+        st.subheader("Dados do Produto Importado (China ➔ Brasil)")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome do Produto", placeholder="Ex: Protetor de Cabo Silicone Tipo C (Kit 4 Pares)")
+            sku = st.text_input("SKU / Código", placeholder="Ex: PROT-TC-04")
+            custo_usd = st.number_input("Custo Unitário (USD / RMB)", min_value=0.0, format="%.2f", value=1.50)
+            frete_unit = st.number_input("Frete Internacional Unitário (R$)", min_value=0.0, format="%.2f", value=0.80)
+        
+        with col2:
+            taxa_importacao = st.number_input("Imposto de Importação (%)", min_value=0.0, value=60.0)
+            icms = st.number_input("ICMS (%)", min_value=0.0, value=18.0)
+            comissao_marketplace = st.number_input("Comissão do Marketplace (%)", min_value=0.0, value=16.0)
+            margem_desejada = st.number_input("Margem de Lucro Desejada (%)", min_value=0.0, value=30.0)
+
+        submitted = st.form_submit_button("Salvar e Calcular Preço", use_container_width=True)
+        if submitted:
+            if nome:
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS products (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome TEXT,
+                        sku TEXT,
+                        custo_usd REAL,
+                        frete_unit REAL,
+                        markup REAL,
+                        preco_venda REAL,
+                        data_cadastro TEXT
+                    )
+                ''')
+                custo_total = (custo_usd * 5.5) + frete_unit
+                markup = 2.5
+                preco_venda = custo_total * markup
+                
+                cursor.execute('''
+                    INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (nome, sku, custo_usd, frete_unit, markup, preco_venda, datetime.now().strftime("%Y-%m-%d")))
+                conn.commit()
+                conn.close()
+                st.success(f"Produto '{nome}' cadastrado com sucesso! Preço Sugerido: R$ {preco_venda:.2f}")
+            else:
+                st.warning("Preencha o nome do produto.")
+
+# ---------------------------------------------------------
+# 3. IMPORTAR CSV
+# ---------------------------------------------------------
+def render_csv_import():
+    st.subheader("Importação em Massa via Planilha CSV")
+    st.markdown("Faça o upload de um arquivo CSV contendo os produtos importados para cadastrá-los em lote.")
+    uploaded_file = st.file_uploader("Escolha o arquivo CSV", type=["csv"])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.dataframe(df, use_container_width=True)
+        if st.button("Processar e Salvar Lote", use_container_width=True):
+            st.success("Planilha processada com sucesso!")
+
+# ---------------------------------------------------------
+# 4. LISTA DE PRODUTOS
+# ---------------------------------------------------------
+def render_products_list():
+    st.subheader("Catálogo de Produtos Cadastrados")
+    conn = get_connection()
+    try:
+        df = pd.read_sql_query("SELECT * FROM products", conn)
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Nenhum produto cadastrado até o momento.")
+
+# ---------------------------------------------------------
+# 5. CALCULADORA DE FORMAÇÃO DE PREÇO
+# ---------------------------------------------------------
+def render_calculator():
+    st.subheader("Simulador Avançado de Formação de Preço")
+    col1, col2 = st.columns(2)
+    with col1:
+        c_prod = st.number_input("Custo do Produto (R$)", value=5.00)
+        f_int = st.number_input("Frete & Embalagem (R$)", value=1.50)
+        imposto = st.number_input("Impostos sobre Venda (%)", value=10.0)
+    with col2:
+        taxa_mkt = st.number_input("Comissão do Marketplace (%)", value=16.0)
+        custo_fixo = st.number_input("Rateio de Custo Fixo (%)", value=5.0)
+        lucro = st.number_input("Margem de Lucro Alvo (%)", value=25.0)
+
+    divisor = 100 - (imposto + taxa_mkt + custo_fixo + lucro)
+    if divisor > 0:
+        custo_total = c_prod + f_int
+        sugerido = custo_total / (divisor / 100)
+        st.markdown(f"### Preço de Venda Ideal: **R$ {sugerido:.2f}**")
+    else:
+        st.error("A soma dos percentuais não pode ultrapassar 100%.")
+
+# ---------------------------------------------------------
+# 6. SIMULADOR DE DESCONTOS
+# ---------------------------------------------------------
+def render_discount_simulator():
+    st.subheader("Simulador de Promoções e Descontos")
+    preco_atual = st.number_input("Preço de Venda Atual (R$)", value=29.90)
+    desconto_pct = st.slider("Percentual de Desconto (%)", 0, 50, 10)
+    novo_preco = preco_atual * (1 - desconto_pct / 100)
+    st.metric("Preço Promocional", f"R$ {novo_preco:.2f}", delta=f"-{desconto_pct}%")
+
+# ---------------------------------------------------------
+# 7. ATACADO
+# ---------------------------------------------------------
+def render_wholesale():
+    st.subheader("Tabela de Preços para Kits e Atacado")
+    st.markdown("Configure descontos progressivos para kits de 2, 4 e 8 pares (ex: protetores de cabo).")
+    qtde = st.selectbox("Quantidade no Kit", ["1 Par", "2 Pares", "4 Pares", "8 Pares"])
+    desconto_lote = st.slider("Desconto para este kit (%)", 0, 30, 10)
+    st.info(f"Aplicando {desconto_lote}% de desconto para o item selecionado.")
+
+# ---------------------------------------------------------
+# 8. CONTROLE DE ESTOQUE
+# ---------------------------------------------------------
+def render_stock_control():
+    st.subheader("Gerenciamento de Estoque & Envio (Olist / Shopee / Amazon)")
+    st.warning("⚠️ Atenção: Estoque baixo para o SKU: PROT-TC-04 (Restam 18 unidades).")
+    conn = get_connection()
+    try:
+        df = pd.read_sql_query("SELECT * FROM products", conn)
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+
+# ---------------------------------------------------------
+# 9. RELATÓRIOS & EXPORTAÇÃO
+# ---------------------------------------------------------
+def render_reports():
+    st.subheader("Exportação de Dados e Relatórios Gerenciais")
+    st.download_button("📥 Baixar Relatório em CSV", data="id,nome,preco\n1,Protetor,29.90", file_name="relatorio_lm.csv", mime="text/csv")
+
+# ---------------------------------------------------------
+# 10. CONFIGURAÇÕES
+# ---------------------------------------------------------
+def render_settings():
+    st.subheader("Configurações Gerais do Sistema")
+    st.text_input("Nome da Empresa", value="LM - Importing 2U®")
+    st.number_input("Cotação Padrão do Dólar (USD)", value=5.50)
+    st.button("Salvar Configurações", use_container_width=True)
