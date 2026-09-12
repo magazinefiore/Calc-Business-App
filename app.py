@@ -19,12 +19,12 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# CARREGAMENTO DE IMAGEM COM TRANSPARÊNCIA FORÇADA E CACHE LIMPO
+# LOCALIZAÇÃO NATIVA DE IMAGENS (MÁXIMA NITIDEZ)
 # ---------------------------------------------------------
-def load_png_image(image_filename):
+def get_image_path(image_filename):
     """
-    Carrega a imagem do disco ignorando o cache, remove fundos brancos 
-    e garante transparência nativa para o tema escuro.
+    Retorna o caminho real do arquivo de imagem para ser renderizado 
+    nativamente pelo Streamlit, garantindo 100% de nitidez e qualidade original.
     """
     base_name = os.path.splitext(image_filename)[0]
     extensions = ['.png', '.PNG', '.jpg', '.JPG', '.jpeg']
@@ -32,21 +32,7 @@ def load_png_image(image_filename):
     for ext in extensions:
         file_path = base_name + ext
         if os.path.exists(file_path):
-            try:
-                img = Image.open(file_path).convert("RGBA")
-                width, height = img.size
-                pixels = img.load()
-                
-                # Remove qualquer tom branco ou cinza muito claro remanescente
-                for y in range(height):
-                    for x in range(width):
-                        r, g, b, a = pixels[x, y]
-                        if r > 225 and g > 225 and b > 225:
-                            pixels[x, y] = (255, 255, 255, 0)
-                            
-                return img
-            except Exception:
-                pass
+            return file_path
     return None
 
 # ---------------------------------------------------------
@@ -99,7 +85,7 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* ELIMINA QUALQUER FUNDO BRANCO NAS IMAGENS DO STREAMLIT */
+    /* EXIBIÇÃO NATIVA DE IMAGENS SEM PERDA DE QUALIDADE */
     [data-testid="stImage"] {
         background-color: transparent !important;
         border: none !important;
@@ -112,12 +98,13 @@ st.markdown("""
     [data-testid="stImage"] img {
         background-color: transparent !important;
         border-radius: 12px;
+        image-rendering: -webkit-optimize-contrast; /* Melhora a nitidez em navegadores Webkit */
     }
 
     /* CARTÃO FLUTUANTE TRANSLÚCIDO E SOBREPOSTO */
     .welcome-overlay-card {
         position: relative;
-        margin-top: -95px; /* Puxa o cartão para cima, sobreponendo a imagem */
+        margin-top: -95px; /* Puxa o cartão para cima, sobrepondo a imagem */
         margin-left: auto;
         margin-right: auto;
         width: 80%;
@@ -189,9 +176,9 @@ if not st.session_state.authenticated:
 # SIDEBAR / MENU LATERAL
 # ---------------------------------------------------------
 with st.sidebar:
-    logo_img = load_png_image("logo.png")
-    if logo_img:
-        st.image(logo_img, use_container_width=True)
+    logo_path = get_image_path("logo.png")
+    if logo_path:
+        st.image(logo_path, use_container_width=True)
     
     st.markdown('<div class="sidebar-title">CALC MARKUP</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-subtitle">LM - Importing 2U®</div>', unsafe_allow_html=True)
@@ -231,15 +218,15 @@ with st.sidebar:
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    home_img = load_png_image("abertura.png")
-    if not home_img:
-        home_img = load_png_image("home.png")
+    home_path = get_image_path("abertura.png")
+    if not home_path:
+        home_path = get_image_path("home.png")
         
-    # Organiza em colunas para diminuir o tamanho horizontal da imagem na tela
+    # Organiza em colunas para manter a proporção e centralização perfeita
     col1, col2, col3 = st.columns([0.5, 5, 0.5])
     with col2:
-        if home_img:
-            st.image(home_img, use_container_width=True)
+        if home_path:
+            st.image(home_path, use_container_width=True)
         
         st.markdown("""
             <div class="welcome-overlay-card">
