@@ -117,7 +117,7 @@ st.markdown("""
     /* CARTÃO FLUTUANTE TRANSLÚCIDO E SOBREPOSTO */
     .welcome-overlay-card {
         position: relative;
-        margin-top: -95px; /* Puxa o cartão para cima, sobrepondo a imagem */
+        margin-top: -95px; /* Puxa o cartão para cima, sobreponendo a imagem */
         margin-left: auto;
         margin-right: auto;
         width: 80%;
@@ -150,7 +150,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# GERENCIAMENTO SEGURO DE LOGIN
+# GERENCIAMENTO SEGURO DE LOGIN (CAMPOS EM BRANCO)
 # ---------------------------------------------------------
 def render_login_screen():
     if hasattr(auth, 'login_page'):
@@ -166,8 +166,8 @@ def render_login_screen():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             with st.form("login_form"):
-                user = st.text_input("Usuário", value="admin")
-                password = st.text_input("Senha", type="password", value="admin123")
+                user = st.text_input("Usuário", value="")
+                password = st.text_input("Senha", type="password", value="")
                 submit = st.form_submit_button("Entrar no Sistema", use_container_width=True)
                 if submit:
                     if user == "admin" and password == "admin123":
