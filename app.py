@@ -50,7 +50,7 @@ def load_png_image(image_filename):
     return None
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TRANSPARÊNCIA TOTAL DE IMAGENS E TEMA ESCURO)
+# ESTILIZAÇÃO CSS (TRANSPARÊNCIA E SOBREPOSIÇÃO DO CARTÃO)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -111,39 +111,40 @@ st.markdown("""
 
     [data-testid="stImage"] img {
         background-color: transparent !important;
-        border-radius: 0px;
+        border-radius: 12px;
     }
 
-    /* Cartão Translúcido de Boas-Vindas */
-    .welcome-card {
+    /* CARTÃO FLUTUANTE TRANSLÚCIDO E SOBREPOSTO */
+    .welcome-overlay-card {
         position: relative;
-        margin-top: 15px;
+        margin-top: -95px; /* Puxa o cartão para cima, sobrepondo a imagem */
         margin-left: auto;
         margin-right: auto;
-        width: 85%;
-        max-width: 620px;
-        background: rgba(22, 27, 34, 0.92);
-        backdrop-filter: blur(12px);
+        width: 80%;
+        max-width: 580px;
+        background: rgba(22, 27, 34, 0.70); /* Alta transparência (Vidro fumê) */
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
         border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 20px 24px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.18);
         text-align: center;
-        z-index: 10;
+        z-index: 99;
         color: #ffffff;
     }
     
-    .welcome-card h2 {
+    .welcome-overlay-card h2 {
         color: #ffffff !important;
         font-weight: 800;
-        font-size: 26px;
-        margin-bottom: 8px;
+        font-size: 24px;
+        margin-bottom: 6px;
     }
     
-    .welcome-card p {
+    .welcome-overlay-card p {
         color: #e5e7eb !important;
-        font-size: 15px;
-        margin-bottom: 6px;
+        font-size: 14px;
+        margin-bottom: 4px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -234,16 +235,19 @@ if menu == "🏠 Início":
     if not home_img:
         home_img = load_png_image("home.png")
         
-    if home_img:
-        st.image(home_img, use_container_width=True)
-    
-    st.markdown("""
-        <div class="welcome-card">
-            <h2>Bem-vindo ao CALC MARKUP</h2>
-            <p>Sua ferramenta inteligente para precificar importações.</p>
-            <p style="font-size: 13px; color: #9ca3af;">Clique em <b>'🛒 Cadastrar Produto'</b> no menu lateral para começar.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # Organiza em colunas para diminuir o tamanho horizontal da imagem na tela
+    col1, col2, col3 = st.columns([0.5, 5, 0.5])
+    with col2:
+        if home_img:
+            st.image(home_img, use_container_width=True)
+        
+        st.markdown("""
+            <div class="welcome-overlay-card">
+                <h2>Bem-vindo ao CALC MARKUP</h2>
+                <p>Sua ferramenta inteligente para precificar importações.</p>
+                <p style="font-size: 13px; color: #38bdf8; margin-top: 6px;">Clique em <b>'🛒 Cadastrar Produto'</b> no menu lateral para começar.</p>
+            </div>
+        """, unsafe_allow_html=True)
 
 elif menu == "📊 Dashboard & Gráficos":
     st.title("📊 Dashboard Executivo & Gráficos")
