@@ -19,13 +19,12 @@ st.set_page_config(
 db.init_db()
 
 # ---------------------------------------------------------
-# CARREGAMENTO DIRETO DE IMAGENS PNG (TRANSPARÊNCIA NATIVA)
+# CARREGAMENTO DE IMAGEM COM TRANSPARÊNCIA FORÇADA E CACHE LIMPO
 # ---------------------------------------------------------
-@st.cache_data
 def load_png_image(image_filename):
     """
-    Carrega imagens PNG com fundo transparente nativo sem aplicar filtros.
-    Suporta variações de nome (.png, .PNG).
+    Carrega a imagem do disco ignorando o cache, remove fundos brancos 
+    e garante transparência nativa para o tema escuro.
     """
     base_name = os.path.splitext(image_filename)[0]
     extensions = ['.png', '.PNG', '.jpg', '.JPG', '.jpeg']
@@ -34,13 +33,24 @@ def load_png_image(image_filename):
         file_path = base_name + ext
         if os.path.exists(file_path):
             try:
-                return Image.open(file_path)
+                img = Image.open(file_path).convert("RGBA")
+                width, height = img.size
+                pixels = img.load()
+                
+                # Remove qualquer tom branco ou cinza muito claro remanescente
+                for y in range(height):
+                    for x in range(width):
+                        r, g, b, a = pixels[x, y]
+                        if r > 225 and g > 225 and b > 225:
+                            pixels[x, y] = (255, 255, 255, 0)
+                            
+                return img
             except Exception:
                 pass
     return None
 
 # ---------------------------------------------------------
-# ESTILIZAÇÃO CSS (TEMA ESCURO, TEXTOS BRANCOS & DESTAQUE DE IMAGEM)
+# ESTILIZAÇÃO CSS (TRANSPARÊNCIA TOTAL DE IMAGENS E TEMA ESCURO)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -89,7 +99,7 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* CENTRALIZAÇÃO E DESIGN DAS IMAGENS PNG */
+    /* ELIMINA QUALQUER FUNDO BRANCO NAS IMAGENS DO STREAMLIT */
     [data-testid="stImage"] {
         background-color: transparent !important;
         border: none !important;
@@ -104,23 +114,10 @@ st.markdown("""
         border-radius: 0px;
     }
 
-    /* Estilização do Botão Sair */
-    section[data-testid="stSidebar"] .stButton>button {
-        background-color: #21262d !important;
-        color: #ffffff !important;
-        border: 1px solid #30363d !important;
-        border-radius: 8px;
-        font-weight: 600;
-    }
-    section[data-testid="stSidebar"] .stButton>button:hover {
-        background-color: #30363d !important;
-        border-color: #8b949e !important;
-    }
-
     /* Cartão Translúcido de Boas-Vindas */
     .welcome-card {
         position: relative;
-        margin-top: -35px;
+        margin-top: 15px;
         margin-left: auto;
         margin-right: auto;
         width: 85%;
@@ -233,7 +230,6 @@ with st.sidebar:
 if menu == "🏠 Início":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Atualizado para chamar "abertura.png" com fallback seguro
     home_img = load_png_image("abertura.png")
     if not home_img:
         home_img = load_png_image("home.png")
