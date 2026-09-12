@@ -167,9 +167,9 @@ if "logged_in" not in st.session_state:
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Tenta exibir a logo na tela de login
+        # CORREÇÃO APLICADA AQUI: use_container_width em vez de use_column_width
         if os.path.exists("logo.png"):
-            st.image("logo.png", use_column_width=True)
+            st.image("logo.png", use_container_width=True)
             
         st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>", unsafe_allow_html=True)
@@ -185,9 +185,9 @@ if not st.session_state.logged_in:
                     st.error("Credenciais inválidas.")
 else:
     with st.sidebar:
-        # Tenta exibir a logo no menu lateral
+        # CORREÇÃO APLICADA AQUI: use_container_width em vez de use_column_width
         if os.path.exists("logo.png"):
-            st.image("logo.png", use_column_width=True)
+            st.image("logo.png", use_container_width=True)
             
         st.markdown("### CALC MARKUP")
         st.markdown("**LM - Importing 2U®**")
