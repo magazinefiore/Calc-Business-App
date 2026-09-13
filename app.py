@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime
 import os
 import hashlib
+import io
 
 # ---------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA E BANCO DE DADOS
@@ -14,10 +15,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def get_connection():
-    # Cria a conexão e garante que as tabelas existam
     conn = sqlite3.connect("database.db", check_same_thread=False)
-    
-    # Tabela de Produtos
     conn.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,8 +28,6 @@ def get_connection():
             data_cadastro TEXT
         )
     ''')
-    
-    # Tabela de Usuários
     conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,8 +37,6 @@ def get_connection():
             data_criacao TEXT
         )
     ''')
-    
-    # Criação do usuário admin padrão caso não exista
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
     if cursor.fetchone()[0] == 0:
@@ -50,29 +44,109 @@ def get_connection():
         conn.execute("INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
                      ("admin", senha_admin, "Administrador", datetime.now().strftime("%Y-%m-%d")))
         conn.commit()
-        
     return conn
 
 # ---------------------------------------------------------
-# FUNÇÕES DE RENDERIZAÇÃO DAS PÁGINAS (MÓDULOS)
+# FUNÇÕES AUXILIARES DE IMPORTAÇÃO
+# ---------------------------------------------------------
+
+# Dicionário de sinônimos: {campo_interno: [nomes prováveis no CSV]}
+SINONIMOS_COLUNAS = {
+    "nome":       ["nome", "produto", "descrição", "descricao", "item", "name", "product"],
+    "sku":        ["sku", "código", "codigo", "cod", "ref", "referência", "referencia", "id"],
+    "custo_usd":  ["custo_usd", "custo usd", "custo", "cost", "custo unitário", "custo unitario",
+                   "custo origem", "valor unit", "valor unitário", "valor unitario"],
+    "frete_unit": ["frete_unit", "frete unit", "frete unitário", "frete unitario",
+                   "frete", "shipping", "frete usd", "frete r$"],
+    "markup":     ["markup", "mark up", "fator", "multiplicador"],
+    "preco_venda":["preco_venda", "preço venda", "preco venda", "preço de venda", "preco de venda",
+                   "valor de venda", "preco final", "preço final", "preco", "preço", "price",
+                   "valor do produto", "valor de venda"],
+    "planilha":   ["planilha", "aba", "categoria", "grupo", "linha"],
+}
+
+def detectar_coluna(df_colunas, campo_interno):
+    """Tenta achar automaticamente uma coluna do DataFrame que corresponde ao campo interno."""
+    sinonimos = SINONIMOS_COLUNAS.get(campo_interno, [])
+    cols_lower = {c.lower().strip(): c for c in df_colunas}
+    for sin in sinonimos:
+        if sin in cols_lower:
+            return cols_lower[sin]
+    # Tentativa por substring
+    for sin in sinonimos:
+        for col_lower, col_orig in cols_lower.items():
+            if sin in col_lower or col_lower in sin:
+                return col_orig
+    return None
+
+def ler_arquivo_tolerante(uploaded_file):
+    """Lê CSV (múltiplas tentativas) ou XLSX. Retorna (df, info)."""
+    nome = uploaded_file.name.lower()
+
+    # ----- XLSX / XLS -----
+    if nome.endswith((".xlsx", ".xls")):
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            if len(xls.sheet_names) == 1:
+                df = xls.parse(xls.sheet_names[0])
+                return df, {"tipo": "xlsx", "aba": xls.sheet_names[0], "abas_disponiveis": xls.sheet_names}
+            else:
+                return xls, {"tipo": "xlsx_multi", "abas_disponiveis": xls.sheet_names}
+        except Exception as e:
+            return None, {"tipo": "erro", "msg": f"Falha ao ler Excel: {e}"}
+
+    # ----- CSV -----
+    tentativas = [
+        {'sep': ',',  'encoding': 'utf-8'},
+        {'sep': ';',  'encoding': 'utf-8'},
+        {'sep': ',',  'encoding': 'latin-1'},
+        {'sep': ';',  'encoding': 'latin-1'},
+        {'sep': ',',  'encoding': 'utf-8-sig'},
+        {'sep': ';',  'encoding': 'utf-8-sig'},
+        {'sep': '\t', 'encoding': 'utf-8'},
+    ]
+    for params in tentativas:
+        try:
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python', **params)
+            if df.shape[1] > 1:
+                return df, {"tipo": "csv", **params}
+        except Exception:
+            continue
+    return None, {"tipo": "erro", "msg": "Não foi possível ler o CSV com nenhuma combinação conhecida."}
+
+def to_float(v):
+    """Converte string/número em float, aceitando vírgula decimal e R$."""
+    if pd.isna(v):
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace("R$", "").replace(" ", "")
+    if "," in s and "." in s:
+        # formato BR: 1.234,56
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+# ---------------------------------------------------------
+# FUNÇÕES DE RENDERIZAÇÃO DAS PÁGINAS
 # ---------------------------------------------------------
 def render_home():
     st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
     st.markdown("### Sistema de Gestão e Precificação - LM - Importing 2U®")
     st.markdown("---")
-    
     st.write("Bem-vindo ao painel central de controle. Utilize o menu lateral para navegar ou acesse os atalhos abaixo:")
-    
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         st.info("📊 **Visão Geral**\nAcompanhe o desempenho, markups médios e os preços dos seus produtos.")
-        
     with col2:
-        st.success("🛒 **Novo Produto**\nCadastre e calcule instantaneamente o preço de venda ideal considerando todos os custos.")
-        
+        st.success("🛒 **Novo Produto**\nCadastre e calcule instantaneamente o preço de venda ideal.")
     with col3:
-        st.warning("🧮 **Calculadora Rápida**\nSimule rapidamente a formação de preço sem precisar salvar no banco de dados.")
+        st.warning("🧮 **Calculadora Rápida**\nSimule rapidamente a formação de preço sem salvar no banco.")
 
 def render_dashboard():
     st.title("📊 Dashboard Executivo & Gráficos")
@@ -97,14 +171,12 @@ def render_product_form():
     st.title("🛒 Cadastrar Novo Produto")
     with st.form("form_cad_produto"):
         st.subheader("Custos de Importação (China ➔ Brasil)")
-        
         col1, col2 = st.columns(2)
         with col1:
             nome = st.text_input("Nome do Produto", placeholder="Ex: Protetor de Cabo Silicone Tipo C (Kit 4 Pares)")
             sku = st.text_input("SKU / Código", placeholder="Ex: PROT-TC-04")
             custo_usd = st.number_input("Custo Unitário (USD / RMB)", min_value=0.0, format="%.2f", value=1.50)
             frete_unit = st.number_input("Frete Internacional Unitário (R$)", min_value=0.0, format="%.2f", value=0.80)
-        
         with col2:
             imposto_importacao = st.number_input("Imposto de Importação (%)", min_value=0.0, value=60.0)
             icms = st.number_input("ICMS (%)", min_value=0.0, value=18.0)
@@ -113,10 +185,9 @@ def render_product_form():
 
         if st.form_submit_button("Salvar e Calcular Preço", use_container_width=True):
             if nome and sku:
-                custo_total = (custo_usd * 5.5) + frete_unit 
+                custo_total = (custo_usd * 5.5) + frete_unit
                 markup = 2.5
                 preco_venda = custo_total * markup
-                
                 conn = get_connection()
                 conn.execute('''
                     INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
@@ -129,118 +200,172 @@ def render_product_form():
                 st.warning("Preencha o Nome e o SKU do produto.")
 
 # ---------------------------------------------------------
-# ✅ FUNÇÃO CORRIGIDA: IMPORTAÇÃO DE CSV COM LEITURA TOLERANTE
+# ✅ IMPORTAÇÃO DE CSV/XLSX COM TODAS AS MELHORIAS
 # ---------------------------------------------------------
 def render_csv_import():
-    st.title("📁 Importar Produtos via CSV")
-    st.markdown("Faça o upload de uma planilha CSV para cadastro em lote.")
-    
-    uploaded_file = st.file_uploader("Selecione o arquivo CSV", type=["csv"])
-    
-    if uploaded_file:
-        # ----- LEITURA TOLERANTE -----
-        def ler_csv_tolerante(file):
-            """Tenta múltiplas combinações de separador e encoding até conseguir ler."""
-            tentativas = [
-                {'sep': ',',  'encoding': 'utf-8'},
-                {'sep': ';',  'encoding': 'utf-8'},
-                {'sep': ',',  'encoding': 'latin-1'},
-                {'sep': ';',  'encoding': 'latin-1'},
-                {'sep': ',',  'encoding': 'utf-8-sig'},
-                {'sep': ';',  'encoding': 'utf-8-sig'},
-                {'sep': '\t', 'encoding': 'utf-8'},
-            ]
-            for params in tentativas:
-                try:
-                    file.seek(0)
-                    df = pd.read_csv(
-                        file,
-                        on_bad_lines='skip',
-                        engine='python',
-                        **params
-                    )
-                    # Considera válido se tiver mais de 1 coluna (evita ler tudo como 1 coluna só)
-                    if df.shape[1] > 1:
-                        return df, params
-                except Exception:
-                    continue
-            return None, None
-        
-        df, params = ler_csv_tolerante(uploaded_file)
-        
-        if df is None:
-            st.error("❌ Não foi possível ler o CSV. Verifique o formato do arquivo.")
-            st.info(
-                "**Dicas de diagnóstico:**\n"
-                "- Abra o CSV no **Bloco de Notas** e verifique o separador usado (`,` ou `;`).\n"
-                "- Verifique se os acentos estão corretos (UTF-8) ou corrompidos (ANSI/Latin-1).\n"
-                "- Verifique se todas as linhas têm o mesmo número de colunas."
-            )
-            st.stop()
-        
-        st.success(
-            f"✅ CSV lido com sucesso! "
-            f"Separador='{params['sep']}', Encoding='{params['encoding']}' — "
-            f"{len(df)} linhas, {df.shape[1]} colunas."
+    st.title("📁 Importar Produtos via CSV / Excel")
+    st.markdown("Faça o upload de uma planilha **CSV** ou **Excel (.xlsx)** para cadastro em lote.")
+
+    uploaded_file = st.file_uploader("Selecione o arquivo", type=["csv", "xlsx", "xls"])
+
+    if not uploaded_file:
+        # ----- Área de exportação do CSV modelo -----
+        st.markdown("---")
+        st.subheader("📤 Exportar modelo de CSV")
+        st.caption("Baixe um CSV de exemplo já no formato esperado pelo app.")
+        exemplo = pd.DataFrame([
+            {"nome": "Protetor de Cabo Silicone Tipo C", "sku": "PROT-TC-04",
+             "custo_usd": 0.04, "frete_unit": 0.80, "markup": 2.5, "preco_venda": 5.30},
+            {"nome": "Protetor de Privacidade de Câmera", "sku": "PROT-CAM-01",
+             "custo_usd": 0.02, "frete_unit": 0.50, "markup": 2.5, "preco_venda": 3.80},
+        ])
+        csv_buffer = io.StringIO()
+        exemplo.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
+        st.download_button(
+            "⬇️ Baixar modelo (CSV)",
+            data=csv_buffer.getvalue().encode("utf-8-sig"),
+            file_name="modelo_importacao_produtos.csv",
+            mime="text/csv",
+            use_container_width=True
         )
+        return
+
+    # ----- LEITURA TOLERANTE (CSV ou XLSX) -----
+    df, info = ler_arquivo_tolerante(uploaded_file)
+
+    if info["tipo"] == "xlsx_multi":
+        st.info("O arquivo Excel contém várias abas. Escolha uma para importar:")
+        aba = st.selectbox("Aba", info["abas_disponiveis"])
+        df = df.parse(aba)
+        info = {"tipo": "xlsx", "aba": aba}
+
+    if df is None or (hasattr(df, "shape") and df.shape[1] < 2):
+        st.error("❌ Não foi possível ler o arquivo. Verifique o formato.")
+        st.info(
+            "**Dicas de diagnóstico:**\n"
+            "- Abra o CSV no **Bloco de Notas** e verifique o separador (`,` ou `;`).\n"
+            "- Verifique se os acentos estão corretos (UTF-8) ou corrompidos (ANSI/Latin-1).\n"
+            "- Verifique se todas as linhas têm o mesmo número de colunas.\n"
+            "- Para Excel, confirme que não há células mescladas nas primeiras linhas."
+        )
+        st.stop()
+
+    if info["tipo"] == "csv":
+        st.success(f"✅ CSV lido! Separador='{info['sep']}', Encoding='{info['encoding']}' — "
+                   f"{len(df)} linhas, {df.shape[1]} colunas.")
+    else:
+        st.success(f"✅ Excel lido! Aba='{info['aba']}' — {len(df)} linhas, {df.shape[1]} colunas.")
+
+    with st.expander("👀 Ver dados brutos importados", expanded=False):
         st.dataframe(df.head(50), use_container_width=True)
-        
-        # ----- MAPEAMENTO DE COLUNAS -----
-        st.markdown("### 🔧 Mapeamento de Colunas")
-        st.caption("Relacione as colunas do seu CSV com os campos do banco de dados.")
-        
-        colunas_csv = ["(nenhuma)"] + list(df.columns)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            col_nome  = st.selectbox("Coluna → Nome do Produto", colunas_csv, index=0)
-            col_sku   = st.selectbox("Coluna → SKU / Código", colunas_csv, index=0)
-            col_custo = st.selectbox("Coluna → Custo USD", colunas_csv, index=0)
-        with col2:
-            col_frete = st.selectbox("Coluna → Frete Unitário (R$)", colunas_csv, index=0)
-            col_mark  = st.selectbox("Coluna → Markup", colunas_csv, index=0)
-            col_preco = st.selectbox("Coluna → Preço de Venda (R$)", colunas_csv, index=0)
-        
-        # ----- PROCESSAMENTO DO LOTE -----
-        if st.button("Processar Lote", use_container_width=True):
-            conn = get_connection()
-            inseridos = 0
-            erros = 0
-            
-            for _, row in df.iterrows():
-                try:
-                    nome  = str(row[col_nome]).strip() if col_nome != "(nenhuma)" else "Sem nome"
-                    sku   = str(row[col_sku]).strip()  if col_sku  != "(nenhuma)" else ""
-                    
-                    # Converte números aceitando vírgula como separador decimal
-                    def to_float(v):
-                        if pd.isna(v):
-                            return 0.0
-                        s = str(v).replace(".", "").replace(",", ".") if "," in str(v) else str(v)
-                        try:
-                            return float(s)
-                        except ValueError:
-                            return 0.0
-                    
-                    custo = to_float(row[col_custo]) if col_custo != "(nenhuma)" else 0.0
-                    frete = to_float(row[col_frete]) if col_frete != "(nenhuma)" else 0.0
-                    mark  = to_float(row[col_mark])  if col_mark  != "(nenhuma)" else 2.5
-                    preco = to_float(row[col_preco]) if col_preco != "(nenhuma)" else ((custo * 5.5) + frete) * mark
-                    
-                    conn.execute('''
-                        INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (nome, sku, custo, frete, mark, preco, datetime.now().strftime("%Y-%m-%d")))
-                    inseridos += 1
-                except Exception:
-                    erros += 1
-                    continue
-            
-            conn.commit()
-            conn.close()
-            st.success(f"✅ {inseridos} produtos importados com sucesso!")
-            if erros > 0:
-                st.warning(f"⚠️ {erros} linhas foram ignoradas por erro de formato.")
+
+    # ----- DETECÇÃO AUTOMÁTICA DE COLUNAS -----
+    st.markdown("### 🔧 Mapeamento de Colunas")
+    st.caption("Os campos abaixo foram **pré-selecionados automaticamente** quando possível. Ajuste se necessário.")
+
+    colunas_csv = ["(nenhuma)"] + list(df.columns)
+
+    def idx_detectado(campo):
+        col = detectar_coluna(df.columns, campo)
+        if col is None:
+            return 0
+        try:
+            return colunas_csv.index(col)
+        except ValueError:
+            return 0
+
+    col1, col2 = st.columns(2)
+    with col1:
+        col_nome  = st.selectbox("Coluna → Nome do Produto",  colunas_csv, index=idx_detectado("nome"))
+        col_sku   = st.selectbox("Coluna → SKU / Código",    colunas_csv, index=idx_detectado("sku"))
+        col_custo = st.selectbox("Coluna → Custo USD",       colunas_csv, index=idx_detectado("custo_usd"))
+    with col2:
+        col_frete = st.selectbox("Coluna → Frete Unitário (R$)", colunas_csv, index=idx_detectado("frete_unit"))
+        col_mark  = st.selectbox("Coluna → Markup",              colunas_csv, index=idx_detectado("markup"))
+        col_preco = st.selectbox("Coluna → Preço de Venda (R$)", colunas_csv, index=idx_detectado("preco_venda"))
+
+    # ----- OPÇÕES DE IMPORTAÇÃO -----
+    st.markdown("### ⚙️ Opções de Importação")
+    opt1, opt2 = st.columns(2)
+    with opt1:
+        modo = st.radio(
+            "Modo de gravação",
+            ["Inserir todos (append)", "Atualizar se SKU existir (upsert)"],
+            horizontal=False,
+            help="No modo upsert, se o SKU já existir no banco, o registro é atualizado em vez de duplicado."
+        )
+    with opt2:
+        pular_sem_nome = st.checkbox("Pular linhas sem nome de produto", value=True)
+
+    # ----- PRÉVIA -----
+    st.markdown("### 🔎 Prévia do que será gravado")
+    preview_rows = []
+    for _, row in df.iterrows():
+        nome  = str(row[col_nome]).strip()  if col_nome  != "(nenhuma)" else ""
+        sku   = str(row[col_sku]).strip()   if col_sku   != "(nenhuma)" else ""
+        custo = to_float(row[col_custo])    if col_custo != "(nenhuma)" else 0.0
+        frete = to_float(row[col_frete])    if col_frete != "(nenhuma)" else 0.0
+        mark  = to_float(row[col_mark])     if col_mark  != "(nenhuma)" else 2.5
+        preco = to_float(row[col_preco])    if col_preco != "(nenhuma)" else ((custo * 5.5) + frete) * mark
+
+        if pular_sem_nome and not nome:
+            continue
+
+        preview_rows.append({
+            "nome": nome,
+            "sku": sku,
+            "custo_usd": round(custo, 4),
+            "frete_unit": round(frete, 4),
+            "markup": round(mark, 4),
+            "preco_venda": round(preco, 2),
+        })
+
+    if not preview_rows:
+        st.warning("Nenhuma linha válida para importar. Verifique o mapeamento.")
+        st.stop()
+
+    df_preview = pd.DataFrame(preview_rows)
+    st.dataframe(df_preview, use_container_width=True)
+    st.caption(f"Total de **{len(df_preview)}** linhas válidas de **{len(df)}** linhas lidas.")
+
+    # ----- BOTÃO DE PROCESSAMENTO -----
+    if st.button("🚀 Processar Lote", use_container_width=True, type="primary"):
+        conn = get_connection()
+        inseridos = 0
+        atualizados = 0
+        erros = 0
+
+        for linha in preview_rows:
+            try:
+                if modo.startswith("Atualizar") and linha["sku"]:
+                    cur = conn.execute("SELECT id FROM products WHERE sku = ?", (linha["sku"],))
+                    existente = cur.fetchone()
+                    if existente:
+                        conn.execute('''
+                            UPDATE products
+                               SET nome=?, custo_usd=?, frete_unit=?, markup=?, preco_venda=?, data_cadastro=?
+                             WHERE id=?
+                        ''', (linha["nome"], linha["custo_usd"], linha["frete_unit"],
+                              linha["markup"], linha["preco_venda"],
+                              datetime.now().strftime("%Y-%m-%d"), existente[0]))
+                        atualizados += 1
+                        continue
+
+                conn.execute('''
+                    INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (linha["nome"], linha["sku"], linha["custo_usd"], linha["frete_unit"],
+                      linha["markup"], linha["preco_venda"], datetime.now().strftime("%Y-%m-%d")))
+                inseridos += 1
+            except Exception:
+                erros += 1
+                continue
+
+        conn.commit()
+        conn.close()
+
+        st.success(f"✅ Importação concluída! Inseridos: **{inseridos}** | "
+                   f"Atualizados: **{atualizados}** | Erros: **{erros}**")
 
 def render_products_list():
     st.title("📦 Lista de Produtos")
@@ -303,18 +428,15 @@ def render_settings():
 
 def render_audit_logs():
     st.title("👤 Usuários & Logs de Auditoria")
-    
     tab1, tab2 = st.tabs(["👥 Cadastro de Usuários", "📋 Logs de Auditoria"])
-    
+
     with tab1:
         st.subheader("Gerenciar Usuários do Sistema")
-        
         with st.form("form_novo_usuario"):
             st.write("Cadastrar novo acesso ao sistema")
             novo_user = st.text_input("Nome de Usuário (Login)")
             nova_senha = st.text_input("Senha", type="password")
             perfil = st.selectbox("Perfil de Acesso", ["Administrador", "Operador"])
-            
             if st.form_submit_button("Cadastrar Usuário", use_container_width=True):
                 if novo_user and nova_senha:
                     try:
@@ -328,7 +450,7 @@ def render_audit_logs():
                         st.error("Este nome de usuário já existe no sistema.")
                 else:
                     st.warning("Preencha todos os campos.")
-        
+
         st.markdown("---")
         st.subheader("Usuários Cadastrados")
         conn = get_connection()
@@ -353,7 +475,6 @@ if not st.session_state.logged_in:
     with col2:
         if os.path.exists("abertura.png"):
             st.image("abertura.png", use_container_width=True)
-            
         st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>", unsafe_allow_html=True)
         with st.form("login_form"):
@@ -365,7 +486,6 @@ if not st.session_state.logged_in:
                 cursor.execute("SELECT password, role FROM users WHERE username = ?", (user.strip(),))
                 result = cursor.fetchone()
                 conn.close()
-                
                 if result and result[0] == hash_password(pwd):
                     st.session_state.logged_in = True
                     st.session_state.username = user
@@ -377,7 +497,6 @@ else:
     with st.sidebar:
         if os.path.exists("abertura.png"):
             st.image("abertura.png", use_container_width=True)
-            
         st.markdown("### CALC MARKUP")
         st.markdown("**LM - Importing 2U®**")
         st.markdown(f"👤 **{st.session_state.username}**")
@@ -387,17 +506,16 @@ else:
             st.session_state.username = ""
             st.session_state.role = ""
             st.rerun()
-            
+
         st.markdown("---")
         menu = st.radio(
             "Navegação",
-            ["Início", "Dashboard & Gráficos", "Cadastrar Produto", "Importar CSV", "Produtos", 
-             "Calculadora de Formação de Preço", "Simulador de Descontos", "Atacado", 
+            ["Início", "Dashboard & Gráficos", "Cadastrar Produto", "Importar CSV", "Produtos",
+             "Calculadora de Formação de Preço", "Simulador de Descontos", "Atacado",
              "Controle de Estoque", "Relatórios & Exportação", "Configurações", "Usuários & Logs de Auditoria"],
             label_visibility="collapsed"
         )
 
-    # ROTEAMENTO
     if menu == "Início": render_home()
     elif menu == "Dashboard & Gráficos": render_dashboard()
     elif menu == "Cadastrar Produto": render_product_form()
