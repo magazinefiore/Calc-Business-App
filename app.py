@@ -7,28 +7,59 @@ import hashlib
 import io
 
 # ---------------------------------------------------------
-# CONFIGURAÇÃO DA PÁGINA E BANCO DE DADOS
+# CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
-st.set_page_config(page_title="CALC MARKUP - LM - Importing 2U®", page_icon="Simulador.ico", layout="wide")
+st.set_page_config(
+    page_title="CALC MARKUP - LM - Importing 2U®",
+    page_icon="Simulador.ico",
+    layout="wide"
+)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def get_connection():
-    conn = sqlite3.connect("database.db", check_same_thread=False)
-    conn.execute('''
+# ---------------------------------------------------------
+# MIGRAÇÃO AUTOMÁTICA DO BANCO
+# ---------------------------------------------------------
+def migrar_banco(conn):
+    """
+    Executa migrações idempotentes:
+    - Renomeia products.custo_usd -> custo_unit (se existir)
+    - Adiciona products.categoria (se não existir)
+    """
+    cursor = conn.cursor()
+
+    # Garante que a tabela products exista (primeira execução)
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT,
             sku TEXT,
-            custo_usd REAL,
+            custo_unit REAL,
             frete_unit REAL,
             markup REAL,
             preco_venda REAL,
+            categoria TEXT,
             data_cadastro TEXT
         )
     ''')
-    conn.execute('''
+
+    # Descobre colunas atuais
+    cursor.execute("PRAGMA table_info(products)")
+    colunas = [row[1] for row in cursor.fetchall()]
+
+    # Migração 1: custo_usd -> custo_unit
+    if "custo_usd" in colunas and "custo_unit" not in colunas:
+        cursor.execute("ALTER TABLE products RENAME COLUMN custo_usd TO custo_unit")
+        conn.commit()
+
+    # Migração 2: adiciona categoria se não existir
+    if "categoria" not in colunas:
+        cursor.execute("ALTER TABLE products ADD COLUMN categoria TEXT DEFAULT 'Geral'")
+        conn.commit()
+
+    # Tabela de usuários
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
@@ -37,65 +68,69 @@ def get_connection():
             data_criacao TEXT
         )
     ''')
-    cursor = conn.cursor()
+
+    # Usuário admin padrão
     cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
     if cursor.fetchone()[0] == 0:
         senha_admin = hash_password("admin123")
-        conn.execute("INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
-                     ("admin", senha_admin, "Administrador", datetime.now().strftime("%Y-%m-%d")))
+        conn.execute(
+            "INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
+            ("admin", senha_admin, "Administrador", datetime.now().strftime("%Y-%m-%d"))
+        )
         conn.commit()
+
+
+def get_connection():
+    conn = sqlite3.connect("database.db", check_same_thread=False)
+    migrar_banco(conn)
     return conn
 
 # ---------------------------------------------------------
 # FUNÇÕES AUXILIARES DE IMPORTAÇÃO
 # ---------------------------------------------------------
-
-# Dicionário de sinônimos: {campo_interno: [nomes prováveis no CSV]}
 SINONIMOS_COLUNAS = {
     "nome":       ["nome", "produto", "descrição", "descricao", "item", "name", "product"],
-    "sku":        ["sku", "código", "codigo", "cod", "ref", "referência", "referencia", "id"],
-    "custo_usd":  ["custo_usd", "custo usd", "custo", "cost", "custo unitário", "custo unitario",
-                   "custo origem", "valor unit", "valor unitário", "valor unitario"],
+    "sku":        ["sku", "código", "codigo", "cod", "ref", "referência", "referencia"],
+    "custo_unit": ["custo_unit", "custo usd", "custo", "cost", "custo unitário",
+                   "custo unitario", "custo origem", "valor unit", "valor unitário"],
     "frete_unit": ["frete_unit", "frete unit", "frete unitário", "frete unitario",
-                   "frete", "shipping", "frete usd", "frete r$"],
+                   "frete", "shipping", "taxa de frete", "taxa frete"],
     "markup":     ["markup", "mark up", "fator", "multiplicador"],
-    "preco_venda":["preco_venda", "preço venda", "preco venda", "preço de venda", "preco de venda",
-                   "valor de venda", "preco final", "preço final", "preco", "preço", "price",
-                   "valor do produto", "valor de venda"],
-    "planilha":   ["planilha", "aba", "categoria", "grupo", "linha"],
+    "preco_venda":["preco_venda", "preço venda", "preco venda", "preço de venda",
+                   "preco de venda", "valor de venda", "preco final", "preço final",
+                   "preco", "preço", "price", "valor do produto"],
+    "categoria":  ["categoria", "category", "grupo", "planilha", "aba", "tipo"],
 }
 
+
 def detectar_coluna(df_colunas, campo_interno):
-    """Tenta achar automaticamente uma coluna do DataFrame que corresponde ao campo interno."""
     sinonimos = SINONIMOS_COLUNAS.get(campo_interno, [])
     cols_lower = {c.lower().strip(): c for c in df_colunas}
     for sin in sinonimos:
         if sin in cols_lower:
             return cols_lower[sin]
-    # Tentativa por substring
     for sin in sinonimos:
         for col_lower, col_orig in cols_lower.items():
             if sin in col_lower or col_lower in sin:
                 return col_orig
     return None
 
+
 def ler_arquivo_tolerante(uploaded_file):
-    """Lê CSV (múltiplas tentativas) ou XLSX. Retorna (df, info)."""
+    """Lê CSV (múltiplas tentativas) ou XLSX."""
     nome = uploaded_file.name.lower()
 
-    # ----- XLSX / XLS -----
     if nome.endswith((".xlsx", ".xls")):
         try:
             xls = pd.ExcelFile(uploaded_file)
             if len(xls.sheet_names) == 1:
                 df = xls.parse(xls.sheet_names[0])
-                return df, {"tipo": "xlsx", "aba": xls.sheet_names[0], "abas_disponiveis": xls.sheet_names}
-            else:
-                return xls, {"tipo": "xlsx_multi", "abas_disponiveis": xls.sheet_names}
+                return df, {"tipo": "xlsx", "aba": xls.sheet_names[0],
+                            "abas_disponiveis": xls.sheet_names}
+            return xls, {"tipo": "xlsx_multi", "abas_disponiveis": xls.sheet_names}
         except Exception as e:
             return None, {"tipo": "erro", "msg": f"Falha ao ler Excel: {e}"}
 
-    # ----- CSV -----
     tentativas = [
         {'sep': ',',  'encoding': 'utf-8'},
         {'sep': ';',  'encoding': 'utf-8'},
@@ -113,17 +148,16 @@ def ler_arquivo_tolerante(uploaded_file):
                 return df, {"tipo": "csv", **params}
         except Exception:
             continue
-    return None, {"tipo": "erro", "msg": "Não foi possível ler o CSV com nenhuma combinação conhecida."}
+    return None, {"tipo": "erro", "msg": "Não foi possível ler o CSV."}
+
 
 def to_float(v):
-    """Converte string/número em float, aceitando vírgula decimal e R$."""
     if pd.isna(v):
         return 0.0
     if isinstance(v, (int, float)):
         return float(v)
     s = str(v).strip().replace("R$", "").replace(" ", "")
     if "," in s and "." in s:
-        # formato BR: 1.234,56
         s = s.replace(".", "").replace(",", ".")
     elif "," in s:
         s = s.replace(",", ".")
@@ -133,31 +167,43 @@ def to_float(v):
         return 0.0
 
 # ---------------------------------------------------------
-# FUNÇÕES DE RENDERIZAÇÃO DAS PÁGINAS
+# PÁGINAS
 # ---------------------------------------------------------
 def render_home():
     st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
     st.markdown("### Sistema de Gestão e Precificação - LM - Importing 2U®")
     st.markdown("---")
-    st.write("Bem-vindo ao painel central de controle. Utilize o menu lateral para navegar ou acesse os atalhos abaixo:")
+    st.write("Bem-vindo ao painel central de controle.")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.info("📊 **Visão Geral**\nAcompanhe o desempenho, markups médios e os preços dos seus produtos.")
+        st.info("📊 **Visão Geral**\nAcompanhe o desempenho, markups médios e preços.")
     with col2:
-        st.success("🛒 **Novo Produto**\nCadastre e calcule instantaneamente o preço de venda ideal.")
+        st.success("🛒 **Novo Produto**\nCadastre e calcule instantaneamente o preço ideal.")
     with col3:
-        st.warning("🧮 **Calculadora Rápida**\nSimule rapidamente a formação de preço sem salvar no banco.")
+        st.warning("🧮 **Calculadora Rápida**\nSimule formação de preço sem salvar no banco.")
+
 
 def render_dashboard():
     st.title("📊 Dashboard Executivo & Gráficos")
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM products", conn)
+
+    # Filtro por categoria
+    categorias = ["(todas)"] + sorted(
+        [c for c in df["categoria"].dropna().unique().tolist() if c]
+    ) if not df.empty else ["(todas)"]
+    cat_escolhida = st.selectbox("Filtrar por categoria", categorias, index=0)
+    if cat_escolhida != "(todas)":
+        df = df[df["categoria"] == cat_escolhida]
+
     conn.close()
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("📦 Produtos Cadastrados", len(df) if not df.empty else 0)
-    col2.metric("📈 Markup Médio", f"{df['markup'].mean():.2f}x" if not df.empty else "0.00x")
-    col3.metric("💰 Preço Médio (Venda)", f"R$ {df['preco_venda'].mean():.2f}" if not df.empty else "R$ 0,00")
+    col2.metric("📈 Markup Médio",
+                f"{df['markup'].mean():.2f}x" if not df.empty else "0.00x")
+    col3.metric("💰 Preço Médio (Venda)",
+                f"R$ {df['preco_venda'].mean():.2f}" if not df.empty else "R$ 0,00")
     col4.metric("🌐 Canais Integrados", "Olist, Amazon, Shopee")
 
     st.markdown("---")
@@ -167,57 +213,70 @@ def render_dashboard():
     else:
         st.info("Cadastre produtos para visualizar os gráficos de precificação.")
 
+
 def render_product_form():
     st.title("🛒 Cadastrar Novo Produto")
     with st.form("form_cad_produto"):
         st.subheader("Custos de Importação (China ➔ Brasil)")
         col1, col2 = st.columns(2)
         with col1:
-            nome = st.text_input("Nome do Produto", placeholder="Ex: Protetor de Cabo Silicone Tipo C (Kit 4 Pares)")
+            nome = st.text_input("Nome do Produto",
+                                 placeholder="Ex: Protetor de Cabo Silicone Tipo C (Kit 4 Pares)")
             sku = st.text_input("SKU / Código", placeholder="Ex: PROT-TC-04")
-            custo_usd = st.number_input("Custo Unitário (USD / RMB)", min_value=0.0, format="%.2f", value=1.50)
-            frete_unit = st.number_input("Frete Internacional Unitário (R$)", min_value=0.0, format="%.2f", value=0.80)
+            custo_unit = st.number_input("Custo Unitário (R$)", min_value=0.0,
+                                         format="%.2f", value=1.50)
+            frete_unit = st.number_input("Frete Internacional Unitário (R$)",
+                                         min_value=0.0, format="%.2f", value=0.80)
         with col2:
-            imposto_importacao = st.number_input("Imposto de Importação (%)", min_value=0.0, value=60.0)
+            categoria = st.text_input("Categoria", value="Geral",
+                                      placeholder="Ex: Cameras, Cabos, Kits")
+            imposto_importacao = st.number_input("Imposto de Importação (%)",
+                                                 min_value=0.0, value=60.0)
             icms = st.number_input("ICMS (%)", min_value=0.0, value=18.0)
-            comissao_mkt = st.number_input("Comissão do Marketplace (%)", min_value=0.0, value=16.0)
-            margem = st.number_input("Margem de Lucro Alvo (%)", min_value=0.0, value=30.0)
+            comissao_mkt = st.number_input("Comissão do Marketplace (%)",
+                                           min_value=0.0, value=16.0)
+            margem = st.number_input("Margem de Lucro Alvo (%)",
+                                     min_value=0.0, value=30.0)
 
         if st.form_submit_button("Salvar e Calcular Preço", use_container_width=True):
             if nome and sku:
-                custo_total = (custo_usd * 5.5) + frete_unit
+                custo_total = (custo_unit * 5.5) + frete_unit
                 markup = 2.5
                 preco_venda = custo_total * markup
                 conn = get_connection()
                 conn.execute('''
-                    INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (nome, sku, custo_usd, frete_unit, markup, preco_venda, datetime.now().strftime("%Y-%m-%d")))
+                    INSERT INTO products
+                    (nome, sku, custo_unit, frete_unit, markup, preco_venda, categoria, data_cadastro)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (nome, sku, custo_unit, frete_unit, markup, preco_venda,
+                      categoria or "Geral", datetime.now().strftime("%Y-%m-%d")))
                 conn.commit()
                 conn.close()
                 st.success(f"Produto '{nome}' salvo! Preço Sugerido: R$ {preco_venda:.2f}")
             else:
                 st.warning("Preencha o Nome e o SKU do produto.")
 
+
 # ---------------------------------------------------------
-# ✅ IMPORTAÇÃO DE CSV/XLSX COM TODAS AS MELHORIAS
+# IMPORTAÇÃO COM CATEGORIA + DRY-RUN
 # ---------------------------------------------------------
 def render_csv_import():
     st.title("📁 Importar Produtos via CSV / Excel")
-    st.markdown("Faça o upload de uma planilha **CSV** ou **Excel (.xlsx)** para cadastro em lote.")
+    st.markdown("Faça o upload de uma planilha **CSV** ou **Excel (.xlsx)**.")
 
-    uploaded_file = st.file_uploader("Selecione o arquivo", type=["csv", "xlsx", "xls"])
+    uploaded_file = st.file_uploader("Selecione o arquivo",
+                                     type=["csv", "xlsx", "xls"])
 
     if not uploaded_file:
-        # ----- Área de exportação do CSV modelo -----
         st.markdown("---")
         st.subheader("📤 Exportar modelo de CSV")
-        st.caption("Baixe um CSV de exemplo já no formato esperado pelo app.")
         exemplo = pd.DataFrame([
-            {"nome": "Protetor de Cabo Silicone Tipo C", "sku": "PROT-TC-04",
-             "custo_usd": 0.04, "frete_unit": 0.80, "markup": 2.5, "preco_venda": 5.30},
-            {"nome": "Protetor de Privacidade de Câmera", "sku": "PROT-CAM-01",
-             "custo_usd": 0.02, "frete_unit": 0.50, "markup": 2.5, "preco_venda": 3.80},
+            {"nome": "Protetor de Cabo Silicone Tipo C", "categoria": "Cabos",
+             "custo_unit": 0.04, "frete_unit": 0.80,
+             "markup": 2.5, "preco_venda": 5.30},
+            {"nome": "Protetor de Privacidade de Câmera", "categoria": "Cameras",
+             "custo_unit": 0.02, "frete_unit": 0.50,
+             "markup": 2.5, "preco_venda": 3.80},
         ])
         csv_buffer = io.StringIO()
         exemplo.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
@@ -226,11 +285,10 @@ def render_csv_import():
             data=csv_buffer.getvalue().encode("utf-8-sig"),
             file_name="modelo_importacao_produtos.csv",
             mime="text/csv",
-            use_container_width=True
+            use_container_width=True,
         )
         return
 
-    # ----- LEITURA TOLERANTE (CSV ou XLSX) -----
     df, info = ler_arquivo_tolerante(uploaded_file)
 
     if info["tipo"] == "xlsx_multi":
@@ -240,28 +298,22 @@ def render_csv_import():
         info = {"tipo": "xlsx", "aba": aba}
 
     if df is None or (hasattr(df, "shape") and df.shape[1] < 2):
-        st.error("❌ Não foi possível ler o arquivo. Verifique o formato.")
-        st.info(
-            "**Dicas de diagnóstico:**\n"
-            "- Abra o CSV no **Bloco de Notas** e verifique o separador (`,` ou `;`).\n"
-            "- Verifique se os acentos estão corretos (UTF-8) ou corrompidos (ANSI/Latin-1).\n"
-            "- Verifique se todas as linhas têm o mesmo número de colunas.\n"
-            "- Para Excel, confirme que não há células mescladas nas primeiras linhas."
-        )
+        st.error("❌ Não foi possível ler o arquivo.")
         st.stop()
 
     if info["tipo"] == "csv":
-        st.success(f"✅ CSV lido! Separador='{info['sep']}', Encoding='{info['encoding']}' — "
+        st.success(f"✅ CSV lido! Separador='{info['sep']}', "
+                   f"Encoding='{info['encoding']}' — "
                    f"{len(df)} linhas, {df.shape[1]} colunas.")
     else:
-        st.success(f"✅ Excel lido! Aba='{info['aba']}' — {len(df)} linhas, {df.shape[1]} colunas.")
+        st.success(f"✅ Excel lido! Aba='{info['aba']}' — "
+                   f"{len(df)} linhas, {df.shape[1]} colunas.")
 
     with st.expander("👀 Ver dados brutos importados", expanded=False):
         st.dataframe(df.head(50), use_container_width=True)
 
-    # ----- DETECÇÃO AUTOMÁTICA DE COLUNAS -----
     st.markdown("### 🔧 Mapeamento de Colunas")
-    st.caption("Os campos abaixo foram **pré-selecionados automaticamente** quando possível. Ajuste se necessário.")
+    st.caption("Pré-selecionado automaticamente quando possível.")
 
     colunas_csv = ["(nenhuma)"] + list(df.columns)
 
@@ -276,106 +328,154 @@ def render_csv_import():
 
     col1, col2 = st.columns(2)
     with col1:
-        col_nome  = st.selectbox("Coluna → Nome do Produto",  colunas_csv, index=idx_detectado("nome"))
-        col_sku   = st.selectbox("Coluna → SKU / Código",    colunas_csv, index=idx_detectado("sku"))
-        col_custo = st.selectbox("Coluna → Custo USD",       colunas_csv, index=idx_detectado("custo_usd"))
+        col_nome      = st.selectbox("Coluna → Nome do Produto",
+                                     colunas_csv, index=idx_detectado("nome"))
+        col_sku       = st.selectbox("Coluna → SKU / Código",
+                                     colunas_csv, index=idx_detectado("sku"))
+        col_custo     = st.selectbox("Coluna → Custo Unitário (R$)",
+                                     colunas_csv, index=idx_detectado("custo_unit"))
     with col2:
-        col_frete = st.selectbox("Coluna → Frete Unitário (R$)", colunas_csv, index=idx_detectado("frete_unit"))
-        col_mark  = st.selectbox("Coluna → Markup",              colunas_csv, index=idx_detectado("markup"))
-        col_preco = st.selectbox("Coluna → Preço de Venda (R$)", colunas_csv, index=idx_detectado("preco_venda"))
+        col_frete     = st.selectbox("Coluna → Frete Unitário (R$)",
+                                     colunas_csv, index=idx_detectado("frete_unit"))
+        col_preco     = st.selectbox("Coluna → Preço de Venda (R$)",
+                                     colunas_csv, index=idx_detectado("preco_venda"))
+        col_categoria = st.selectbox("Coluna → Categoria",
+                                     colunas_csv, index=idx_detectado("categoria"))
 
-    # ----- OPÇÕES DE IMPORTAÇÃO -----
     st.markdown("### ⚙️ Opções de Importação")
     opt1, opt2 = st.columns(2)
     with opt1:
         modo = st.radio(
             "Modo de gravação",
             ["Inserir todos (append)", "Atualizar se SKU existir (upsert)"],
-            horizontal=False,
-            help="No modo upsert, se o SKU já existir no banco, o registro é atualizado em vez de duplicado."
+            help="Upsert precisa de SKU preenchido."
         )
     with opt2:
         pular_sem_nome = st.checkbox("Pular linhas sem nome de produto", value=True)
 
-    # ----- PRÉVIA -----
+    # Prévia
     st.markdown("### 🔎 Prévia do que será gravado")
     preview_rows = []
     for _, row in df.iterrows():
-        nome  = str(row[col_nome]).strip()  if col_nome  != "(nenhuma)" else ""
-        sku   = str(row[col_sku]).strip()   if col_sku   != "(nenhuma)" else ""
-        custo = to_float(row[col_custo])    if col_custo != "(nenhuma)" else 0.0
-        frete = to_float(row[col_frete])    if col_frete != "(nenhuma)" else 0.0
-        mark  = to_float(row[col_mark])     if col_mark  != "(nenhuma)" else 2.5
-        preco = to_float(row[col_preco])    if col_preco != "(nenhuma)" else ((custo * 5.5) + frete) * mark
+        nome      = str(row[col_nome]).strip()      if col_nome      != "(nenhuma)" else ""
+        sku       = str(row[col_sku]).strip()       if col_sku       != "(nenhuma)" else ""
+        custo     = to_float(row[col_custo])        if col_custo     != "(nenhuma)" else 0.0
+        frete     = to_float(row[col_frete])        if col_frete     != "(nenhuma)" else 0.0
+        preco     = to_float(row[col_preco])        if col_preco     != "(nenhuma)" else 0.0
+        categoria = str(row[col_categoria]).strip() if col_categoria != "(nenhuma)" else "Geral"
 
         if pular_sem_nome and not nome:
             continue
 
+        markup = 2.5
+        if preco == 0.0:
+            preco = ((custo * 5.5) + frete) * markup
+
         preview_rows.append({
             "nome": nome,
             "sku": sku,
-            "custo_usd": round(custo, 4),
+            "custo_unit": round(custo, 4),
             "frete_unit": round(frete, 4),
-            "markup": round(mark, 4),
+            "markup": markup,
             "preco_venda": round(preco, 2),
+            "categoria": categoria or "Geral",
         })
 
     if not preview_rows:
-        st.warning("Nenhuma linha válida para importar. Verifique o mapeamento.")
+        st.warning("Nenhuma linha válida para importar.")
         st.stop()
 
     df_preview = pd.DataFrame(preview_rows)
     st.dataframe(df_preview, use_container_width=True)
-    st.caption(f"Total de **{len(df_preview)}** linhas válidas de **{len(df)}** linhas lidas.")
+    st.caption(f"Total de **{len(df_preview)}** linhas válidas "
+               f"de **{len(df)}** linhas lidas.")
 
-    # ----- BOTÃO DE PROCESSAMENTO -----
-    if st.button("🚀 Processar Lote", use_container_width=True, type="primary"):
+    # Botões
+    st.markdown("### 🚀 Executar")
+    btn1, btn2 = st.columns(2)
+    with btn1:
+        simular = st.button("🔍 Simular (dry-run)", use_container_width=True)
+    with btn2:
+        processar = st.button("🚀 Processar Lote", use_container_width=True, type="primary")
+
+    if simular or processar:
         conn = get_connection()
-        inseridos = 0
-        atualizados = 0
-        erros = 0
+        inseridos = atualizados = erros = 0
+        log_erros = []
 
         for linha in preview_rows:
             try:
                 if modo.startswith("Atualizar") and linha["sku"]:
-                    cur = conn.execute("SELECT id FROM products WHERE sku = ?", (linha["sku"],))
+                    cur = conn.execute("SELECT id FROM products WHERE sku = ?",
+                                       (linha["sku"],))
                     existente = cur.fetchone()
                     if existente:
-                        conn.execute('''
-                            UPDATE products
-                               SET nome=?, custo_usd=?, frete_unit=?, markup=?, preco_venda=?, data_cadastro=?
-                             WHERE id=?
-                        ''', (linha["nome"], linha["custo_usd"], linha["frete_unit"],
-                              linha["markup"], linha["preco_venda"],
-                              datetime.now().strftime("%Y-%m-%d"), existente[0]))
+                        if processar:
+                            conn.execute('''
+                                UPDATE products
+                                   SET nome=?, custo_unit=?, frete_unit=?, markup=?,
+                                       preco_venda=?, categoria=?, data_cadastro=?
+                                 WHERE id=?
+                            ''', (linha["nome"], linha["custo_unit"],
+                                  linha["frete_unit"], linha["markup"],
+                                  linha["preco_venda"], linha["categoria"],
+                                  datetime.now().strftime("%Y-%m-%d"),
+                                  existente[0]))
                         atualizados += 1
                         continue
 
-                conn.execute('''
-                    INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (linha["nome"], linha["sku"], linha["custo_usd"], linha["frete_unit"],
-                      linha["markup"], linha["preco_venda"], datetime.now().strftime("%Y-%m-%d")))
+                if processar:
+                    conn.execute('''
+                        INSERT INTO products
+                        (nome, sku, custo_unit, frete_unit, markup,
+                         preco_venda, categoria, data_cadastro)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (linha["nome"], linha["sku"], linha["custo_unit"],
+                          linha["frete_unit"], linha["markup"],
+                          linha["preco_venda"], linha["categoria"],
+                          datetime.now().strftime("%Y-%m-%d")))
                 inseridos += 1
-            except Exception:
+            except Exception as e:
                 erros += 1
-                continue
+                log_erros.append(str(e))
 
-        conn.commit()
+        if processar:
+            conn.commit()
         conn.close()
 
-        st.success(f"✅ Importação concluída! Inseridos: **{inseridos}** | "
-                   f"Atualizados: **{atualizados}** | Erros: **{erros}**")
+        titulo = "🔍 Simulação concluída" if simular else "✅ Importação concluída"
+        st.success(
+            f"{titulo}! Inseridos: **{inseridos}** | "
+            f"Atualizados: **{atualizados}** | Erros: **{erros}**"
+            + ("\n\n_(Nenhum dado foi gravado — apenas simulação.)_" if simular else "")
+        )
+        if log_erros:
+            with st.expander("Ver detalhes dos erros"):
+                for e in log_erros[:20]:
+                    st.code(e)
+
 
 def render_products_list():
     st.title("📦 Lista de Produtos")
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM products", conn)
     conn.close()
-    if not df.empty:
-        st.dataframe(df, use_container_width=True)
-    else:
+
+    if df.empty:
         st.info("Nenhum produto cadastrado no banco de dados.")
+        return
+
+    # Filtro por categoria
+    categorias = ["(todas)"] + sorted(
+        [c for c in df["categoria"].dropna().unique().tolist() if c]
+    )
+    cat = st.selectbox("Filtrar por categoria", categorias)
+    if cat != "(todas)":
+        df = df[df["categoria"] == cat]
+
+    st.dataframe(df, use_container_width=True)
+    st.caption(f"{len(df)} produtos exibidos.")
+
 
 def render_calculator():
     st.title("🧮 Calculadora de Formação de Preço")
@@ -396,35 +496,45 @@ def render_calculator():
     else:
         st.error("A soma das porcentagens não pode ser maior ou igual a 100%.")
 
+
 def render_discount_simulator():
     st.title("🏷️ Simulador de Descontos e Promoções")
     preco_atual = st.number_input("Preço de Venda Atual (R$)", value=29.90)
     desconto = st.slider("Desconto a aplicar (%)", 0, 50, 10)
     novo_preco = preco_atual * (1 - desconto / 100)
-    st.metric("Preço Final com Desconto", f"R$ {novo_preco:.2f}", f"-{desconto}%")
+    st.metric("Preço Final com Desconto",
+              f"R$ {novo_preco:.2f}", f"-{desconto}%")
+
 
 def render_wholesale():
     st.title("🛒 Estratégia de Atacado & Kits")
-    st.markdown("Defina preços regressivos para variações de kits.")
-    kit = st.selectbox("Selecione a Variação", ["Kit 1 Par", "Kit 2 Pares", "Kit 4 Pares", "Kit 8 Pares"])
+    kit = st.selectbox("Selecione a Variação",
+                       ["Kit 1 Par", "Kit 2 Pares", "Kit 4 Pares", "Kit 8 Pares"])
     desc_lote = st.slider("Desconto para o volume selecionado (%)", 0, 40, 15)
     st.info(f"Regra configurada: {desc_lote}% de desconto para {kit}.")
+
 
 def render_stock_control():
     st.title("📋 Controle de Estoque & Expedição")
     st.warning("⚠️ Alerta: SKU PROT-TC-04 está com estoque baixo (18 unidades).")
     render_products_list()
 
+
 def render_reports():
     st.title("📄 Relatórios & Exportação")
-    st.markdown("Gere relatórios para conferência de etiquetas ou balanço financeiro.")
-    st.download_button("Baixar Tabela de Preços (CSV)", "id,nome,preco\n1,Protetor,29.90", "tabela_lm.csv", "text/csv")
+    st.markdown("Gere relatórios para conferência ou balanço financeiro.")
+    st.download_button("Baixar Tabela de Preços (CSV)",
+                       "id,nome,preco\n1,Protetor,29.90",
+                       "tabela_lm.csv", "text/csv")
+
 
 def render_settings():
     st.title("⚙️ Configurações Globais")
     st.text_input("Nome da Operação", value="LM - Importing 2U®")
-    st.number_input("Cotação Fixa do Dólar (USD para BRL)", value=5.50, format="%.2f")
+    st.number_input("Cotação Fixa do Dólar (USD para BRL)",
+                    value=5.50, format="%.2f")
     st.button("Salvar Configurações", use_container_width=True)
+
 
 def render_audit_logs():
     st.title("👤 Usuários & Logs de Auditoria")
@@ -441,8 +551,11 @@ def render_audit_logs():
                 if novo_user and nova_senha:
                     try:
                         conn = get_connection()
-                        conn.execute("INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
-                                     (novo_user.strip(), hash_password(nova_senha), perfil, datetime.now().strftime("%Y-%m-%d")))
+                        conn.execute(
+                            "INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
+                            (novo_user.strip(), hash_password(nova_senha),
+                             perfil, datetime.now().strftime("%Y-%m-%d"))
+                        )
                         conn.commit()
                         conn.close()
                         st.success(f"Usuário '{novo_user}' cadastrado com sucesso!")
@@ -454,7 +567,8 @@ def render_audit_logs():
         st.markdown("---")
         st.subheader("Usuários Cadastrados")
         conn = get_connection()
-        df_users = pd.read_sql_query("SELECT id, username, role, data_criacao FROM users", conn)
+        df_users = pd.read_sql_query(
+            "SELECT id, username, role, data_criacao FROM users", conn)
         conn.close()
         st.dataframe(df_users, use_container_width=True)
 
@@ -463,7 +577,7 @@ def render_audit_logs():
         st.info("Nenhum log recente de alteração de preços.")
 
 # ---------------------------------------------------------
-# SISTEMA DE LOGIN E NAVEGAÇÃO
+# LOGIN E NAVEGAÇÃO
 # ---------------------------------------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -475,15 +589,22 @@ if not st.session_state.logged_in:
     with col2:
         if os.path.exists("abertura.png"):
             st.image("abertura.png", use_container_width=True)
-        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>",
+                    unsafe_allow_html=True)
+        st.markdown(
+            "<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>",
+            unsafe_allow_html=True
+        )
         with st.form("login_form"):
             user = st.text_input("Usuário", placeholder="admin")
             pwd = st.text_input("Senha", type="password")
             if st.form_submit_button("Entrar no Sistema", use_container_width=True):
                 conn = get_connection()
                 cursor = conn.cursor()
-                cursor.execute("SELECT password, role FROM users WHERE username = ?", (user.strip(),))
+                cursor.execute(
+                    "SELECT password, role FROM users WHERE username = ?",
+                    (user.strip(),)
+                )
                 result = cursor.fetchone()
                 conn.close()
                 if result and result[0] == hash_password(pwd):
@@ -510,21 +631,35 @@ else:
         st.markdown("---")
         menu = st.radio(
             "Navegação",
-            ["Início", "Dashboard & Gráficos", "Cadastrar Produto", "Importar CSV", "Produtos",
-             "Calculadora de Formação de Preço", "Simulador de Descontos", "Atacado",
-             "Controle de Estoque", "Relatórios & Exportação", "Configurações", "Usuários & Logs de Auditoria"],
+            ["Início", "Dashboard & Gráficos", "Cadastrar Produto",
+             "Importar CSV", "Produtos",
+             "Calculadora de Formação de Preço", "Simulador de Descontos",
+             "Atacado", "Controle de Estoque", "Relatórios & Exportação",
+             "Configurações", "Usuários & Logs de Auditoria"],
             label_visibility="collapsed"
         )
 
-    if menu == "Início": render_home()
-    elif menu == "Dashboard & Gráficos": render_dashboard()
-    elif menu == "Cadastrar Produto": render_product_form()
-    elif menu == "Importar CSV": render_csv_import()
-    elif menu == "Produtos": render_products_list()
-    elif menu == "Calculadora de Formação de Preço": render_calculator()
-    elif menu == "Simulador de Descontos": render_discount_simulator()
-    elif menu == "Atacado": render_wholesale()
-    elif menu == "Controle de Estoque": render_stock_control()
-    elif menu == "Relatórios & Exportação": render_reports()
-    elif menu == "Configurações": render_settings()
-    elif menu == "Usuários & Logs de Auditoria": render_audit_logs()
+    if menu == "Início":
+        render_home()
+    elif menu == "Dashboard & Gráficos":
+        render_dashboard()
+    elif menu == "Cadastrar Produto":
+        render_product_form()
+    elif menu == "Importar CSV":
+        render_csv_import()
+    elif menu == "Produtos":
+        render_products_list()
+    elif menu == "Calculadora de Formação de Preço":
+        render_calculator()
+    elif menu == "Simulador de Descontos":
+        render_discount_simulator()
+    elif menu == "Atacado":
+        render_wholesale()
+    elif menu == "Controle de Estoque":
+        render_stock_control()
+    elif menu == "Relatórios & Exportação":
+        render_reports()
+    elif menu == "Configurações":
+        render_settings()
+    elif menu == "Usuários & Logs de Auditoria":
+        render_audit_logs()
