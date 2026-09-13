@@ -576,7 +576,6 @@ def render_manual():
     st.markdown("Bem-vindo ao manual interativo. Navegue pelas abas abaixo.")
     st.markdown("---")
 
-    # Caminho do manual (mesma pasta do app.py)
     manual_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manual.md")
 
     if not os.path.exists(manual_path):
@@ -591,7 +590,7 @@ def render_manual():
         st.error(f"❌ Erro ao ler o `manual.md`: {e}")
         return
 
-    # --- Divide o manual em seções (cada "## X" vira uma aba) ---
+    # Divide o manual em seções (cada "## X" vira uma aba)
     secoes = {}
     secao_atual = "Introdução"
     secoes[secao_atual] = []
@@ -613,7 +612,7 @@ def render_manual():
         st.warning("Nenhuma seção encontrada no `manual.md`. Verifique o formato.")
         return
 
-    # --- Gera o HTML completo com CSS embutido ---
+    # Gera HTML com CSS embutido
     try:
         import markdown as md_lib
         html_body = md_lib.markdown(
@@ -621,7 +620,6 @@ def render_manual():
             extensions=["extra", "toc", "tables", "fenced_code"]
         )
     except ImportError:
-        # Fallback simples caso a lib `markdown` não esteja disponível
         html_body = conteudo.replace("\n", "<br>")
 
     html_completo = f"""<!DOCTYPE html>
@@ -641,107 +639,41 @@ def render_manual():
         color: #2d3748;
         background-color: #f7fafc;
     }}
-    h1 {{
-        color: #1a365d;
-        border-bottom: 3px solid #3182ce;
-        padding-bottom: 12px;
-        margin-top: 40px;
-    }}
-    h2 {{
-        color: #2c5282;
-        border-bottom: 2px solid #bee3f8;
-        padding-bottom: 8px;
-        margin-top: 36px;
-    }}
-    h3 {{
-        color: #2b6cb0;
-        margin-top: 24px;
-    }}
+    h1 {{ color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 12px; margin-top: 40px; }}
+    h2 {{ color: #2c5282; border-bottom: 2px solid #bee3f8; padding-bottom: 8px; margin-top: 36px; }}
+    h3 {{ color: #2b6cb0; margin-top: 24px; }}
     code {{
-        background-color: #edf2f7;
-        color: #c53030;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-family: "Consolas", "Monaco", monospace;
-        font-size: 0.9em;
+        background-color: #edf2f7; color: #c53030; padding: 2px 6px;
+        border-radius: 4px; font-family: "Consolas", "Monaco", monospace; font-size: 0.9em;
     }}
     pre {{
-        background-color: #2d3748;
-        color: #f7fafc;
-        padding: 16px;
-        border-radius: 8px;
-        overflow-x: auto;
-        line-height: 1.5;
+        background-color: #2d3748; color: #f7fafc; padding: 16px;
+        border-radius: 8px; overflow-x: auto; line-height: 1.5;
     }}
-    pre code {{
-        background-color: transparent;
-        color: inherit;
-        padding: 0;
-    }}
+    pre code {{ background-color: transparent; color: inherit; padding: 0; }}
     table {{
-        border-collapse: collapse;
-        width: 100%;
-        margin: 20px 0;
-        background-color: #ffffff;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        border-collapse: collapse; width: 100%; margin: 20px 0;
+        background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }}
-    th, td {{
-        border: 1px solid #cbd5e0;
-        padding: 10px 14px;
-        text-align: left;
-    }}
-    th {{
-        background-color: #3182ce;
-        color: #ffffff;
-        font-weight: 600;
-    }}
-    tr:nth-child(even) {{
-        background-color: #f7fafc;
-    }}
+    th, td {{ border: 1px solid #cbd5e0; padding: 10px 14px; text-align: left; }}
+    th {{ background-color: #3182ce; color: #ffffff; font-weight: 600; }}
+    tr:nth-child(even) {{ background-color: #f7fafc; }}
     blockquote {{
-        border-left: 4px solid #3182ce;
-        padding-left: 16px;
-        margin-left: 0;
-        color: #4a5568;
-        background-color: #ebf8ff;
-        padding: 12px 16px;
-        border-radius: 4px;
+        border-left: 4px solid #3182ce; padding-left: 16px; margin-left: 0;
+        color: #4a5568; background-color: #ebf8ff; padding: 12px 16px; border-radius: 4px;
     }}
-    ul, ol {{
-        padding-left: 28px;
-    }}
-    li {{
-        margin: 6px 0;
-    }}
-    hr {{
-        border: none;
-        border-top: 2px solid #e2e8f0;
-        margin: 32px 0;
-    }}
-    a {{
-        color: #3182ce;
-        text-decoration: none;
-    }}
-    a:hover {{
-        text-decoration: underline;
-    }}
+    ul, ol {{ padding-left: 28px; }}
+    li {{ margin: 6px 0; }}
+    hr {{ border: none; border-top: 2px solid #e2e8f0; margin: 32px 0; }}
+    a {{ color: #3182ce; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
     .header {{
-        text-align: center;
-        margin-bottom: 40px;
-        padding: 20px;
+        text-align: center; margin-bottom: 40px; padding: 20px;
         background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
-        color: white;
-        border-radius: 12px;
+        color: white; border-radius: 12px;
     }}
-    .header h1 {{
-        color: white;
-        border: none;
-        margin: 0;
-    }}
-    .header p {{
-        margin: 8px 0 0 0;
-        opacity: 0.9;
-    }}
+    .header h1 {{ color: white; border: none; margin: 0; }}
+    .header p {{ margin: 8px 0 0 0; opacity: 0.9; }}
     @media print {{
         body {{ background-color: white; margin: 0; padding: 20px; }}
         .header {{ background: #3182ce !important; -webkit-print-color-adjust: exact; }}
@@ -761,7 +693,7 @@ def render_manual():
 </body>
 </html>"""
 
-    # --- Renderiza as abas no app ---
+    # Renderiza as abas no app
     nomes_abas = list(secoes.keys())
     abas = st.tabs([f"📄 {nome}" for nome in nomes_abas])
 
@@ -771,7 +703,7 @@ def render_manual():
 
     st.markdown("---")
 
-    # --- Botões de download ---
+    # Botões de download
     st.markdown("### 📥 Baixar o Manual")
     st.caption("Escolha o formato ideal para o seu uso:")
 
@@ -805,3 +737,14 @@ def render_manual():
 # ---------------------------------------------------------
 # LOGIN E NAVEGAÇÃO
 # ---------------------------------------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.role = ""
+
+if not st.session_state.logged_in:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if os.path.exists("abertura.png"):
+            st.image("abertura.png", use_container_width=True)
+        st.markdown("<h2 style='text
