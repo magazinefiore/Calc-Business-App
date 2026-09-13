@@ -724,7 +724,7 @@ else:
         render_dashboard()
     elif menu == "Cadastrar Produto":
         render_product_form()
-        elif menu == "Importar CSV":
+    elif menu == "Importar CSV":
         render_csv_import()
     elif menu == "Produtos":
         render_products_list()
