@@ -29,7 +29,6 @@ def migrar_banco(conn):
     """
     cursor = conn.cursor()
 
-    # Garante que a tabela products exista (primeira execução)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,21 +43,17 @@ def migrar_banco(conn):
         )
     ''')
 
-    # Descobre colunas atuais
     cursor.execute("PRAGMA table_info(products)")
     colunas = [row[1] for row in cursor.fetchall()]
 
-    # Migração 1: custo_usd -> custo_unit
     if "custo_usd" in colunas and "custo_unit" not in colunas:
         cursor.execute("ALTER TABLE products RENAME COLUMN custo_usd TO custo_unit")
         conn.commit()
 
-    # Migração 2: adiciona categoria se não existir
     if "categoria" not in colunas:
         cursor.execute("ALTER TABLE products ADD COLUMN categoria TEXT DEFAULT 'Geral'")
         conn.commit()
 
-    # Tabela de usuários
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +64,6 @@ def migrar_banco(conn):
         )
     ''')
 
-    # Usuário admin padrão
     cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
     if cursor.fetchone()[0] == 0:
         senha_admin = hash_password("admin123")
@@ -188,7 +182,6 @@ def render_dashboard():
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM products", conn)
 
-    # Filtro por categoria
     categorias = ["(todas)"] + sorted(
         [c for c in df["categoria"].dropna().unique().tolist() if c]
     ) if not df.empty else ["(todas)"]
@@ -353,7 +346,6 @@ def render_csv_import():
     with opt2:
         pular_sem_nome = st.checkbox("Pular linhas sem nome de produto", value=True)
 
-    # Prévia
     st.markdown("### 🔎 Prévia do que será gravado")
     preview_rows = []
     for _, row in df.iterrows():
@@ -390,7 +382,6 @@ def render_csv_import():
     st.caption(f"Total de **{len(df_preview)}** linhas válidas "
                f"de **{len(df)}** linhas lidas.")
 
-    # Botões
     st.markdown("### 🚀 Executar")
     btn1, btn2 = st.columns(2)
     with btn1:
@@ -465,7 +456,6 @@ def render_products_list():
         st.info("Nenhum produto cadastrado no banco de dados.")
         return
 
-    # Filtro por categoria
     categorias = ["(todas)"] + sorted(
         [c for c in df["categoria"].dropna().unique().tolist() if c]
     )
@@ -576,6 +566,77 @@ def render_audit_logs():
         st.subheader("Registro de Atividades")
         st.info("Nenhum log recente de alteração de preços.")
 
+
+# ---------------------------------------------------------
+# 📘 NOVA PÁGINA: MANUAL (renderiza o manual.md em abas)
+# ---------------------------------------------------------
+def render_manual():
+    """Renderiza a página do Manual de Uso em abas temáticas."""
+    st.title("📘 Manual de Uso — CALC MARKUP")
+    st.markdown("Bem-vindo ao manual interativo. Navegue pelas abas abaixo.")
+    st.markdown("---")
+
+    # Caminho do manual (mesma pasta do app.py)
+    manual_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manual.md")
+
+    if not os.path.exists(manual_path):
+        st.error("❌ Arquivo `manual.md` não encontrado na pasta do app.")
+        st.info("Certifique-se de que o `manual.md` está no mesmo diretório do `app.py`.")
+        return
+
+    try:
+        with open(manual_path, "r", encoding="utf-8") as f:
+            conteudo = f.read()
+    except Exception as e:
+        st.error(f"❌ Erro ao ler o `manual.md`: {e}")
+        return
+
+    # Divide o manual em seções (cada "## X" vira uma aba)
+    secoes = {}
+    secao_atual = "Introdução"
+    secoes[secao_atual] = []
+
+    for linha in conteudo.splitlines():
+        if linha.startswith("## "):
+            secao_atual = linha.replace("## ", "", 1).strip()
+            secoes[secao_atual] = []
+        else:
+            secoes[secao_atual].append(linha)
+
+    # Junta o texto de cada seção
+    for k in list(secoes.keys()):
+        secoes[k] = "\n".join(secoes[k]).strip()
+
+    # Remove a "Introdução" se estiver vazia
+    if not secoes.get("Introdução", ""):
+        del secoes["Introdução"]
+
+    if not secoes:
+        st.warning("Nenhuma seção encontrada no `manual.md`. Verifique o formato.")
+        return
+
+    # Cria as abas
+    nomes_abas = list(secoes.keys())
+    abas = st.tabs([f"📄 {nome}" for nome in nomes_abas])
+
+    for aba, nome in zip(abas, nomes_abas):
+        with aba:
+            st.markdown(secoes[nome])
+
+    st.markdown("---")
+
+    # Botão para baixar o manual original
+    st.download_button(
+        label="⬇️ Baixar Manual (Markdown)",
+        data=conteudo.encode("utf-8"),
+        file_name="Manual_CALC_MARKUP.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+
+    st.caption("💡 Manual v1.0 — em constante atualização.")
+
+
 # ---------------------------------------------------------
 # LOGIN E NAVEGAÇÃO
 # ---------------------------------------------------------
@@ -635,7 +696,8 @@ else:
              "Importar CSV", "Produtos",
              "Calculadora de Formação de Preço", "Simulador de Descontos",
              "Atacado", "Controle de Estoque", "Relatórios & Exportação",
-             "Configurações", "Usuários & Logs de Auditoria"],
+             "Configurações", "Usuários & Logs de Auditoria",
+             "📘 Manual"],  # <-- NOVO
             label_visibility="collapsed"
         )
 
@@ -663,3 +725,5 @@ else:
         render_settings()
     elif menu == "Usuários & Logs de Auditoria":
         render_audit_logs()
+    elif menu == "📘 Manual":  # <-- NOVO
+        render_manual()
