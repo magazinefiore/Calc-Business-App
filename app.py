@@ -87,7 +87,7 @@ def render_product_form():
 
         if st.form_submit_button("Salvar e Calcular Preço", use_container_width=True):
             if nome and sku:
-                custo_total = (custo_usd * 5.5) + frete_unit # Exemplo com dólar a 5.50
+                custo_total = (custo_usd * 5.5) + frete_unit 
                 markup = 2.5
                 preco_venda = custo_total * markup
                 
@@ -185,8 +185,8 @@ if "logged_in" not in st.session_state:
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", use_container_width=True)
+        if os.path.exists("abertura.png"):
+            st.image("abertura.png", use_container_width=True)
             
         st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>", unsafe_allow_html=True)
@@ -194,7 +194,6 @@ if not st.session_state.logged_in:
             user = st.text_input("Usuário", placeholder="admin")
             pwd = st.text_input("Senha", type="password")
             if st.form_submit_button("Entrar no Sistema", use_container_width=True):
-                # Autenticação aceitando admin123
                 if user == "admin" and pwd == "admin123":
                     st.session_state.logged_in = True
                     st.session_state.username = user
@@ -203,8 +202,8 @@ if not st.session_state.logged_in:
                     st.error("Credenciais inválidas.")
 else:
     with st.sidebar:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", use_container_width=True)
+        if os.path.exists("abertura.png"):
+            st.image("abertura.png", use_container_width=True)
             
         st.markdown("### CALC MARKUP")
         st.markdown("**LM - Importing 2U®**")
