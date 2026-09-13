@@ -128,15 +128,119 @@ def render_product_form():
             else:
                 st.warning("Preencha o Nome e o SKU do produto.")
 
+# ---------------------------------------------------------
+# ✅ FUNÇÃO CORRIGIDA: IMPORTAÇÃO DE CSV COM LEITURA TOLERANTE
+# ---------------------------------------------------------
 def render_csv_import():
     st.title("📁 Importar Produtos via CSV")
     st.markdown("Faça o upload de uma planilha CSV para cadastro em lote.")
+    
     uploaded_file = st.file_uploader("Selecione o arquivo CSV", type=["csv"])
+    
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.dataframe(df, use_container_width=True)
+        # ----- LEITURA TOLERANTE -----
+        def ler_csv_tolerante(file):
+            """Tenta múltiplas combinações de separador e encoding até conseguir ler."""
+            tentativas = [
+                {'sep': ',',  'encoding': 'utf-8'},
+                {'sep': ';',  'encoding': 'utf-8'},
+                {'sep': ',',  'encoding': 'latin-1'},
+                {'sep': ';',  'encoding': 'latin-1'},
+                {'sep': ',',  'encoding': 'utf-8-sig'},
+                {'sep': ';',  'encoding': 'utf-8-sig'},
+                {'sep': '\t', 'encoding': 'utf-8'},
+            ]
+            for params in tentativas:
+                try:
+                    file.seek(0)
+                    df = pd.read_csv(
+                        file,
+                        on_bad_lines='skip',
+                        engine='python',
+                        **params
+                    )
+                    # Considera válido se tiver mais de 1 coluna (evita ler tudo como 1 coluna só)
+                    if df.shape[1] > 1:
+                        return df, params
+                except Exception:
+                    continue
+            return None, None
+        
+        df, params = ler_csv_tolerante(uploaded_file)
+        
+        if df is None:
+            st.error("❌ Não foi possível ler o CSV. Verifique o formato do arquivo.")
+            st.info(
+                "**Dicas de diagnóstico:**\n"
+                "- Abra o CSV no **Bloco de Notas** e verifique o separador usado (`,` ou `;`).\n"
+                "- Verifique se os acentos estão corretos (UTF-8) ou corrompidos (ANSI/Latin-1).\n"
+                "- Verifique se todas as linhas têm o mesmo número de colunas."
+            )
+            st.stop()
+        
+        st.success(
+            f"✅ CSV lido com sucesso! "
+            f"Separador='{params['sep']}', Encoding='{params['encoding']}' — "
+            f"{len(df)} linhas, {df.shape[1]} colunas."
+        )
+        st.dataframe(df.head(50), use_container_width=True)
+        
+        # ----- MAPEAMENTO DE COLUNAS -----
+        st.markdown("### 🔧 Mapeamento de Colunas")
+        st.caption("Relacione as colunas do seu CSV com os campos do banco de dados.")
+        
+        colunas_csv = ["(nenhuma)"] + list(df.columns)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            col_nome  = st.selectbox("Coluna → Nome do Produto", colunas_csv, index=0)
+            col_sku   = st.selectbox("Coluna → SKU / Código", colunas_csv, index=0)
+            col_custo = st.selectbox("Coluna → Custo USD", colunas_csv, index=0)
+        with col2:
+            col_frete = st.selectbox("Coluna → Frete Unitário (R$)", colunas_csv, index=0)
+            col_mark  = st.selectbox("Coluna → Markup", colunas_csv, index=0)
+            col_preco = st.selectbox("Coluna → Preço de Venda (R$)", colunas_csv, index=0)
+        
+        # ----- PROCESSAMENTO DO LOTE -----
         if st.button("Processar Lote", use_container_width=True):
-            st.success("Produtos importados com sucesso!")
+            conn = get_connection()
+            inseridos = 0
+            erros = 0
+            
+            for _, row in df.iterrows():
+                try:
+                    nome  = str(row[col_nome]).strip() if col_nome != "(nenhuma)" else "Sem nome"
+                    sku   = str(row[col_sku]).strip()  if col_sku  != "(nenhuma)" else ""
+                    
+                    # Converte números aceitando vírgula como separador decimal
+                    def to_float(v):
+                        if pd.isna(v):
+                            return 0.0
+                        s = str(v).replace(".", "").replace(",", ".") if "," in str(v) else str(v)
+                        try:
+                            return float(s)
+                        except ValueError:
+                            return 0.0
+                    
+                    custo = to_float(row[col_custo]) if col_custo != "(nenhuma)" else 0.0
+                    frete = to_float(row[col_frete]) if col_frete != "(nenhuma)" else 0.0
+                    mark  = to_float(row[col_mark])  if col_mark  != "(nenhuma)" else 2.5
+                    preco = to_float(row[col_preco]) if col_preco != "(nenhuma)" else ((custo * 5.5) + frete) * mark
+                    
+                    conn.execute('''
+                        INSERT INTO products (nome, sku, custo_usd, frete_unit, markup, preco_venda, data_cadastro)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ''', (nome, sku, custo, frete, mark, preco, datetime.now().strftime("%Y-%m-%d")))
+                    inseridos += 1
+                except Exception:
+                    erros += 1
+                    continue
+            
+            conn.commit()
+            conn.close()
+            st.success(f"✅ {inseridos} produtos importados com sucesso!")
+            if erros > 0:
+                st.warning(f"⚠️ {erros} linhas foram ignoradas por erro de formato.")
 
 def render_products_list():
     st.title("📦 Lista de Produtos")
@@ -293,7 +397,7 @@ else:
             label_visibility="collapsed"
         )
 
-    # ROTEAMENTO CORRIGIDO
+    # ROTEAMENTO
     if menu == "Início": render_home()
     elif menu == "Dashboard & Gráficos": render_dashboard()
     elif menu == "Cadastrar Produto": render_product_form()
