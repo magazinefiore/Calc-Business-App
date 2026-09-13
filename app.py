@@ -22,11 +22,6 @@ def hash_password(password):
 # MIGRAÇÃO AUTOMÁTICA DO BANCO
 # ---------------------------------------------------------
 def migrar_banco(conn):
-    """
-    Executa migrações idempotentes:
-    - Renomeia products.custo_usd -> custo_unit (se existir)
-    - Adiciona products.categoria (se não existir)
-    """
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -111,7 +106,6 @@ def detectar_coluna(df_colunas, campo_interno):
 
 
 def ler_arquivo_tolerante(uploaded_file):
-    """Lê CSV (múltiplas tentativas) ou XLSX."""
     nome = uploaded_file.name.lower()
 
     if nome.endswith((".xlsx", ".xls")):
@@ -214,15 +208,14 @@ def render_product_form():
         col1, col2 = st.columns(2)
         with col1:
             nome = st.text_input("Nome do Produto",
-                                 placeholder="Ex: Protetor de Cabo Silicone Tipo C (Kit 4 Pares)")
+                                 placeholder="Ex: Protetor de Cabo Silicone Tipo C")
             sku = st.text_input("SKU / Código", placeholder="Ex: PROT-TC-04")
             custo_unit = st.number_input("Custo Unitário (R$)", min_value=0.0,
                                          format="%.2f", value=1.50)
             frete_unit = st.number_input("Frete Internacional Unitário (R$)",
                                          min_value=0.0, format="%.2f", value=0.80)
         with col2:
-            categoria = st.text_input("Categoria", value="Geral",
-                                      placeholder="Ex: Cameras, Cabos, Kits")
+            categoria = st.text_input("Categoria", value="Geral")
             imposto_importacao = st.number_input("Imposto de Importação (%)",
                                                  min_value=0.0, value=60.0)
             icms = st.number_input("ICMS (%)", min_value=0.0, value=18.0)
@@ -250,9 +243,6 @@ def render_product_form():
                 st.warning("Preencha o Nome e o SKU do produto.")
 
 
-# ---------------------------------------------------------
-# IMPORTAÇÃO COM CATEGORIA + DRY-RUN
-# ---------------------------------------------------------
 def render_csv_import():
     st.title("📁 Importar Produtos via CSV / Excel")
     st.markdown("Faça o upload de uma planilha **CSV** ou **Excel (.xlsx)**.")
@@ -267,9 +257,6 @@ def render_csv_import():
             {"nome": "Protetor de Cabo Silicone Tipo C", "categoria": "Cabos",
              "custo_unit": 0.04, "frete_unit": 0.80,
              "markup": 2.5, "preco_venda": 5.30},
-            {"nome": "Protetor de Privacidade de Câmera", "categoria": "Cameras",
-             "custo_unit": 0.02, "frete_unit": 0.50,
-             "markup": 2.5, "preco_venda": 3.80},
         ])
         csv_buffer = io.StringIO()
         exemplo.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
@@ -295,19 +282,14 @@ def render_csv_import():
         st.stop()
 
     if info["tipo"] == "csv":
-        st.success(f"✅ CSV lido! Separador='{info['sep']}', "
-                   f"Encoding='{info['encoding']}' — "
-                   f"{len(df)} linhas, {df.shape[1]} colunas.")
+        st.success(f"✅ CSV lido! Separador='{info['sep']}', Encoding='{info['encoding']}'.")
     else:
-        st.success(f"✅ Excel lido! Aba='{info['aba']}' — "
-                   f"{len(df)} linhas, {df.shape[1]} colunas.")
+        st.success(f"✅ Excel lido! Aba='{info['aba']}'.")
 
     with st.expander("👀 Ver dados brutos importados", expanded=False):
         st.dataframe(df.head(50), use_container_width=True)
 
     st.markdown("### 🔧 Mapeamento de Colunas")
-    st.caption("Pré-selecionado automaticamente quando possível.")
-
     colunas_csv = ["(nenhuma)"] + list(df.columns)
 
     def idx_detectado(campo):
@@ -341,7 +323,6 @@ def render_csv_import():
         modo = st.radio(
             "Modo de gravação",
             ["Inserir todos (append)", "Atualizar se SKU existir (upsert)"],
-            help="Upsert precisa de SKU preenchido."
         )
     with opt2:
         pular_sem_nome = st.checkbox("Pular linhas sem nome de produto", value=True)
@@ -379,8 +360,7 @@ def render_csv_import():
 
     df_preview = pd.DataFrame(preview_rows)
     st.dataframe(df_preview, use_container_width=True)
-    st.caption(f"Total de **{len(df_preview)}** linhas válidas "
-               f"de **{len(df)}** linhas lidas.")
+    st.caption(f"Total de **{len(df_preview)}** linhas válidas.")
 
     st.markdown("### 🚀 Executar")
     btn1, btn2 = st.columns(2)
@@ -533,7 +513,6 @@ def render_audit_logs():
     with tab1:
         st.subheader("Gerenciar Usuários do Sistema")
         with st.form("form_novo_usuario"):
-            st.write("Cadastrar novo acesso ao sistema")
             novo_user = st.text_input("Nome de Usuário (Login)")
             nova_senha = st.text_input("Senha", type="password")
             perfil = st.selectbox("Perfil de Acesso", ["Administrador", "Operador"])
@@ -567,9 +546,6 @@ def render_audit_logs():
         st.info("Nenhum log recente de alteração de preços.")
 
 
-# ---------------------------------------------------------
-# 📘 PÁGINA: MANUAL (abas + downloads HTML e Markdown)
-# ---------------------------------------------------------
 def render_manual():
     """Renderiza a página do Manual de Uso em abas temáticas + downloads HTML/MD."""
     st.title("📘 Manual de Uso — CALC MARKUP")
@@ -580,7 +556,6 @@ def render_manual():
 
     if not os.path.exists(manual_path):
         st.error("❌ Arquivo `manual.md` não encontrado na pasta do app.")
-        st.info("Certifique-se de que o `manual.md` está no mesmo diretório do `app.py`.")
         return
 
     try:
@@ -590,7 +565,6 @@ def render_manual():
         st.error(f"❌ Erro ao ler o `manual.md`: {e}")
         return
 
-    # Divide o manual em seções (cada "## X" vira uma aba)
     secoes = {}
     secao_atual = "Introdução"
     secoes[secao_atual] = []
@@ -609,10 +583,9 @@ def render_manual():
         del secoes["Introdução"]
 
     if not secoes:
-        st.warning("Nenhuma seção encontrada no `manual.md`. Verifique o formato.")
+        st.warning("Nenhuma seção encontrada no `manual.md`.")
         return
 
-    # Gera HTML com CSS embutido
     try:
         import markdown as md_lib
         html_body = md_lib.markdown(
@@ -626,58 +599,18 @@ def render_manual():
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manual de Uso — CALC MARKUP</title>
 <style>
-    body {{
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                     "Helvetica Neue", Arial, sans-serif;
-        max-width: 960px;
-        margin: 40px auto;
-        padding: 20px 40px;
-        line-height: 1.65;
-        color: #2d3748;
-        background-color: #f7fafc;
-    }}
-    h1 {{ color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 12px; margin-top: 40px; }}
-    h2 {{ color: #2c5282; border-bottom: 2px solid #bee3f8; padding-bottom: 8px; margin-top: 36px; }}
-    h3 {{ color: #2b6cb0; margin-top: 24px; }}
-    code {{
-        background-color: #edf2f7; color: #c53030; padding: 2px 6px;
-        border-radius: 4px; font-family: "Consolas", "Monaco", monospace; font-size: 0.9em;
-    }}
-    pre {{
-        background-color: #2d3748; color: #f7fafc; padding: 16px;
-        border-radius: 8px; overflow-x: auto; line-height: 1.5;
-    }}
-    pre code {{ background-color: transparent; color: inherit; padding: 0; }}
-    table {{
-        border-collapse: collapse; width: 100%; margin: 20px 0;
-        background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }}
-    th, td {{ border: 1px solid #cbd5e0; padding: 10px 14px; text-align: left; }}
-    th {{ background-color: #3182ce; color: #ffffff; font-weight: 600; }}
-    tr:nth-child(even) {{ background-color: #f7fafc; }}
-    blockquote {{
-        border-left: 4px solid #3182ce; padding-left: 16px; margin-left: 0;
-        color: #4a5568; background-color: #ebf8ff; padding: 12px 16px; border-radius: 4px;
-    }}
-    ul, ol {{ padding-left: 28px; }}
-    li {{ margin: 6px 0; }}
-    hr {{ border: none; border-top: 2px solid #e2e8f0; margin: 32px 0; }}
-    a {{ color: #3182ce; text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
-    .header {{
-        text-align: center; margin-bottom: 40px; padding: 20px;
-        background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
-        color: white; border-radius: 12px;
-    }}
-    .header h1 {{ color: white; border: none; margin: 0; }}
-    .header p {{ margin: 8px 0 0 0; opacity: 0.9; }}
-    @media print {{
-        body {{ background-color: white; margin: 0; padding: 20px; }}
-        .header {{ background: #3182ce !important; -webkit-print-color-adjust: exact; }}
-    }}
+body {{ font-family: Arial, sans-serif; max-width: 960px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #2d3748; background: #f7fafc; }}
+h1 {{ color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 12px; }}
+h2 {{ color: #2c5282; border-bottom: 2px solid #bee3f8; padding-bottom: 8px; }}
+code {{ background: #edf2f7; color: #c53030; padding: 2px 6px; border-radius: 4px; }}
+pre {{ background: #2d3748; color: #f7fafc; padding: 16px; border-radius: 8px; overflow-x: auto; }}
+table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+th, td {{ border: 1px solid #cbd5e0; padding: 10px; text-align: left; }}
+th {{ background: #3182ce; color: white; }}
+.header {{ text-align: center; padding: 20px; background: linear-gradient(135deg, #3182ce, #2c5282); color: white; border-radius: 12px; margin-bottom: 30px; }}
+.header h1 {{ color: white; border: none; }}
 </style>
 </head>
 <body>
@@ -688,12 +621,11 @@ def render_manual():
 {html_body}
 <hr>
 <p style="text-align: center; color: #718096; font-size: 0.9em;">
-    Manual v1.0 — em constante atualização — LM - Importing 2U®
+Manual v1.0 — em constante atualização — LM - Importing 2U®
 </p>
 </body>
 </html>"""
 
-    # Renderiza as abas no app
     nomes_abas = list(secoes.keys())
     abas = st.tabs([f"📄 {nome}" for nome in nomes_abas])
 
@@ -703,7 +635,6 @@ def render_manual():
 
     st.markdown("---")
 
-    # Botões de download
     st.markdown("### 📥 Baixar o Manual")
     st.caption("Escolha o formato ideal para o seu uso:")
 
@@ -716,7 +647,6 @@ def render_manual():
             file_name="Manual_CALC_MARKUP.html",
             mime="text/html",
             use_container_width=True,
-            help="Abre com duplo-clique em qualquer navegador, já formatado.",
         )
         st.caption("🖥️ **HTML** — abre bonito no navegador")
 
@@ -727,13 +657,10 @@ def render_manual():
             file_name="Manual_CALC_MARKUP.md",
             mime="text/markdown",
             use_container_width=True,
-            help="Formato editável, abre no VSCode ou Bloco de Notas.",
         )
-        st.caption("✏️ **Markdown** — editável em qualquer editor de texto")
+        st.caption("✏️ **Markdown** — editável em qualquer editor")
 
     st.caption("💡 Manual v1.0 — em constante atualização.")
-
-
 # ---------------------------------------------------------
 # LOGIN E NAVEGAÇÃO
 # ---------------------------------------------------------
@@ -747,4 +674,54 @@ if not st.session_state.logged_in:
     with col2:
         if os.path.exists("abertura.png"):
             st.image("abertura.png", use_container_width=True)
-        st.markdown("<h2 style='text
+        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            user = st.text_input("Usuário", placeholder="admin")
+            pwd = st.text_input("Senha", type="password")
+            if st.form_submit_button("Entrar no Sistema", use_container_width=True):
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT password, role FROM users WHERE username = ?", (user.strip(),))
+                result = cursor.fetchone()
+                conn.close()
+                if result and result[0] == hash_password(pwd):
+                    st.session_state.logged_in = True
+                    st.session_state.username = user
+                    st.session_state.role = result[1]
+                    st.rerun()
+                else:
+                    st.error("Credenciais inválidas.")
+else:
+    with st.sidebar:
+        if os.path.exists("abertura.png"):
+            st.image("abertura.png", use_container_width=True)
+        st.markdown("### CALC MARKUP")
+        st.markdown("**LM - Importing 2U®**")
+        st.markdown(f"👤 **{st.session_state.username}**")
+        st.caption(f"({st.session_state.role})")
+        if st.button("Sair / Trocar Usuário", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.role = ""
+            st.rerun()
+
+        st.markdown("---")
+        menu = st.radio(
+            "Navegação",
+            ["Início", "Dashboard & Gráficos", "Cadastrar Produto",
+             "Importar CSV", "Produtos",
+             "Calculadora de Formação de Preço", "Simulador de Descontos",
+             "Atacado", "Controle de Estoque", "Relatórios & Exportação",
+             "Configurações", "Usuários & Logs de Auditoria",
+             "📘 Manual"],
+            label_visibility="collapsed"
+        )
+
+    if menu == "Início":
+        render_home()
+    elif menu == "Dashboard & Gráficos":
+        render_dashboard()
+    elif menu == "Cadastrar Produto":
+        render_product_form()
+    elif menu == "Importar
