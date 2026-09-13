@@ -3,15 +3,21 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 import os
+import hashlib
 
 # ---------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA E BANCO DE DADOS
 # ---------------------------------------------------------
 st.set_page_config(page_title="CALC MARKUP - LM - Importing 2U®", page_icon="Simulador.ico", layout="wide")
 
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
 def get_connection():
-    # Cria a conexão e garante que a tabela exista
+    # Cria a conexão e garante que as tabelas existam
     conn = sqlite3.connect("database.db", check_same_thread=False)
+    
+    # Tabela de Produtos
     conn.execute('''
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +30,27 @@ def get_connection():
             data_cadastro TEXT
         )
     ''')
-    conn.commit()
+    
+    # Tabela de Usuários
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            role TEXT,
+            data_criacao TEXT
+        )
+    ''')
+    
+    # Criação do usuário admin padrão caso não exista
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+    if cursor.fetchone()[0] == 0:
+        senha_admin = hash_password("admin123")
+        conn.execute("INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
+                     ("admin", senha_admin, "Administrador", datetime.now().strftime("%Y-%m-%d")))
+        conn.commit()
+        
     return conn
 
 # ---------------------------------------------------------
@@ -173,7 +199,42 @@ def render_settings():
 
 def render_audit_logs():
     st.title("👤 Usuários & Logs de Auditoria")
-    st.info("Nenhum log recente de alteração de preços.")
+    
+    tab1, tab2 = st.tabs(["👥 Cadastro de Usuários", "📋 Logs de Auditoria"])
+    
+    with tab1:
+        st.subheader("Gerenciar Usuários do Sistema")
+        
+        with st.form("form_novo_usuario"):
+            st.write("Cadastrar novo acesso ao sistema")
+            novo_user = st.text_input("Nome de Usuário (Login)")
+            nova_senha = st.text_input("Senha", type="password")
+            perfil = st.selectbox("Perfil de Acesso", ["Administrador", "Operador"])
+            
+            if st.form_submit_button("Cadastrar Usuário", use_container_width=True):
+                if novo_user and nova_senha:
+                    try:
+                        conn = get_connection()
+                        conn.execute("INSERT INTO users (username, password, role, data_criacao) VALUES (?, ?, ?, ?)",
+                                     (novo_user.strip(), hash_password(nova_senha), perfil, datetime.now().strftime("%Y-%m-%d")))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Usuário '{novo_user}' cadastrado com sucesso!")
+                    except sqlite3.IntegrityError:
+                        st.error("Este nome de usuário já existe no sistema.")
+                else:
+                    st.warning("Preencha todos os campos.")
+        
+        st.markdown("---")
+        st.subheader("Usuários Cadastrados")
+        conn = get_connection()
+        df_users = pd.read_sql_query("SELECT id, username, role, data_criacao FROM users", conn)
+        conn.close()
+        st.dataframe(df_users, use_container_width=True)
+
+    with tab2:
+        st.subheader("Registro de Atividades")
+        st.info("Nenhum log recente de alteração de preços.")
 
 # ---------------------------------------------------------
 # SISTEMA DE LOGIN E NAVEGAÇÃO
@@ -181,6 +242,7 @@ def render_audit_logs():
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
+    st.session_state.role = ""
 
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -194,9 +256,16 @@ if not st.session_state.logged_in:
             user = st.text_input("Usuário", placeholder="admin")
             pwd = st.text_input("Senha", type="password")
             if st.form_submit_button("Entrar no Sistema", use_container_width=True):
-                if user == "admin" and pwd == "admin123":
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT password, role FROM users WHERE username = ?", (user.strip(),))
+                result = cursor.fetchone()
+                conn.close()
+                
+                if result and result[0] == hash_password(pwd):
                     st.session_state.logged_in = True
                     st.session_state.username = user
+                    st.session_state.role = result[1]
                     st.rerun()
                 else:
                     st.error("Credenciais inválidas.")
@@ -208,9 +277,11 @@ else:
         st.markdown("### CALC MARKUP")
         st.markdown("**LM - Importing 2U®**")
         st.markdown(f"👤 **{st.session_state.username}**")
-        st.caption("(Administrador)")
+        st.caption(f"({st.session_state.role})")
         if st.button("Sair / Trocar Usuário", use_container_width=True):
             st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.role = ""
             st.rerun()
             
         st.markdown("---")
