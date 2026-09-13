@@ -724,4 +724,23 @@ else:
         render_dashboard()
     elif menu == "Cadastrar Produto":
         render_product_form()
-    elif menu == "Importar
+        elif menu == "Importar CSV":
+        render_csv_import()
+    elif menu == "Produtos":
+        render_products_list()
+    elif menu == "Calculadora de Formação de Preço":
+        render_calculator()
+    elif menu == "Simulador de Descontos":
+        render_discount_simulator()
+    elif menu == "Atacado":
+        render_wholesale()
+    elif menu == "Controle de Estoque":
+        render_stock_control()
+    elif menu == "Relatórios & Exportação":
+        render_reports()
+    elif menu == "Configurações":
+        render_settings()
+    elif menu == "Usuários & Logs de Auditoria":
+        render_audit_logs()
+    elif menu == "📘 Manual":
+        render_manual()
