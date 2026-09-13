@@ -30,6 +30,24 @@ def get_connection():
 # ---------------------------------------------------------
 # FUNÇÕES DE RENDERIZAÇÃO DAS PÁGINAS (MÓDULOS)
 # ---------------------------------------------------------
+def render_home():
+    st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
+    st.markdown("### Sistema de Gestão e Precificação - LM - Importing 2U®")
+    st.markdown("---")
+    
+    st.write("Bem-vindo ao painel central de controle. Utilize o menu lateral para navegar ou acesse os atalhos abaixo:")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.info("📊 **Visão Geral**\nAcompanhe o desempenho, markups médios e os preços dos seus produtos.")
+        
+    with col2:
+        st.success("🛒 **Novo Produto**\nCadastre e calcule instantaneamente o preço de venda ideal considerando todos os custos.")
+        
+    with col3:
+        st.warning("🧮 **Calculadora Rápida**\nSimule rapidamente a formação de preço sem precisar salvar no banco de dados.")
+
 def render_dashboard():
     st.title("📊 Dashboard Executivo & Gráficos")
     conn = get_connection()
@@ -167,7 +185,6 @@ if "logged_in" not in st.session_state:
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # CORREÇÃO APLICADA AQUI: use_container_width em vez de use_column_width
         if os.path.exists("logo.png"):
             st.image("logo.png", use_container_width=True)
             
@@ -177,7 +194,8 @@ if not st.session_state.logged_in:
             user = st.text_input("Usuário", placeholder="admin")
             pwd = st.text_input("Senha", type="password")
             if st.form_submit_button("Entrar no Sistema", use_container_width=True):
-                if user == "admin" and pwd == "admin":
+                # Autenticação aceitando admin123
+                if user == "admin" and pwd == "admin123":
                     st.session_state.logged_in = True
                     st.session_state.username = user
                     st.rerun()
@@ -185,7 +203,6 @@ if not st.session_state.logged_in:
                     st.error("Credenciais inválidas.")
 else:
     with st.sidebar:
-        # CORREÇÃO APLICADA AQUI: use_container_width em vez de use_column_width
         if os.path.exists("logo.png"):
             st.image("logo.png", use_container_width=True)
             
@@ -206,8 +223,9 @@ else:
             label_visibility="collapsed"
         )
 
-    # Roteamento
-    if menu in ["Início", "Dashboard & Gráficos"]: render_dashboard()
+    # ROTEAMENTO CORRIGIDO
+    if menu == "Início": render_home()
+    elif menu == "Dashboard & Gráficos": render_dashboard()
     elif menu == "Cadastrar Produto": render_product_form()
     elif menu == "Importar CSV": render_csv_import()
     elif menu == "Produtos": render_products_list()
