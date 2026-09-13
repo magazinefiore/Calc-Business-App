@@ -7,7 +7,7 @@ import os
 # ---------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA E BANCO DE DADOS
 # ---------------------------------------------------------
-st.set_page_config(page_title="CALC MARKUP - LM - Importing 2U®", page_icon="📦", layout="wide")
+st.set_page_config(page_title="CALC MARKUP - LM - Importing 2U®", page_icon="Simulador.ico", layout="wide")
 
 def get_connection():
     # Cria a conexão e garante que a tabela exista
