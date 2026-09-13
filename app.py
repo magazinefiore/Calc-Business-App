@@ -568,10 +568,10 @@ def render_audit_logs():
 
 
 # ---------------------------------------------------------
-# 📘 NOVA PÁGINA: MANUAL (renderiza o manual.md em abas)
+# 📘 PÁGINA: MANUAL (abas + downloads HTML e Markdown)
 # ---------------------------------------------------------
 def render_manual():
-    """Renderiza a página do Manual de Uso em abas temáticas."""
+    """Renderiza a página do Manual de Uso em abas temáticas + downloads HTML/MD."""
     st.title("📘 Manual de Uso — CALC MARKUP")
     st.markdown("Bem-vindo ao manual interativo. Navegue pelas abas abaixo.")
     st.markdown("---")
@@ -591,7 +591,7 @@ def render_manual():
         st.error(f"❌ Erro ao ler o `manual.md`: {e}")
         return
 
-    # Divide o manual em seções (cada "## X" vira uma aba)
+    # --- Divide o manual em seções (cada "## X" vira uma aba) ---
     secoes = {}
     secao_atual = "Introdução"
     secoes[secao_atual] = []
@@ -603,11 +603,9 @@ def render_manual():
         else:
             secoes[secao_atual].append(linha)
 
-    # Junta o texto de cada seção
     for k in list(secoes.keys()):
         secoes[k] = "\n".join(secoes[k]).strip()
 
-    # Remove a "Introdução" se estiver vazia
     if not secoes.get("Introdução", ""):
         del secoes["Introdução"]
 
@@ -615,7 +613,155 @@ def render_manual():
         st.warning("Nenhuma seção encontrada no `manual.md`. Verifique o formato.")
         return
 
-    # Cria as abas
+    # --- Gera o HTML completo com CSS embutido ---
+    try:
+        import markdown as md_lib
+        html_body = md_lib.markdown(
+            conteudo,
+            extensions=["extra", "toc", "tables", "fenced_code"]
+        )
+    except ImportError:
+        # Fallback simples caso a lib `markdown` não esteja disponível
+        html_body = conteudo.replace("\n", "<br>")
+
+    html_completo = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de Uso — CALC MARKUP</title>
+<style>
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                     "Helvetica Neue", Arial, sans-serif;
+        max-width: 960px;
+        margin: 40px auto;
+        padding: 20px 40px;
+        line-height: 1.65;
+        color: #2d3748;
+        background-color: #f7fafc;
+    }}
+    h1 {{
+        color: #1a365d;
+        border-bottom: 3px solid #3182ce;
+        padding-bottom: 12px;
+        margin-top: 40px;
+    }}
+    h2 {{
+        color: #2c5282;
+        border-bottom: 2px solid #bee3f8;
+        padding-bottom: 8px;
+        margin-top: 36px;
+    }}
+    h3 {{
+        color: #2b6cb0;
+        margin-top: 24px;
+    }}
+    code {{
+        background-color: #edf2f7;
+        color: #c53030;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "Consolas", "Monaco", monospace;
+        font-size: 0.9em;
+    }}
+    pre {{
+        background-color: #2d3748;
+        color: #f7fafc;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        line-height: 1.5;
+    }}
+    pre code {{
+        background-color: transparent;
+        color: inherit;
+        padding: 0;
+    }}
+    table {{
+        border-collapse: collapse;
+        width: 100%;
+        margin: 20px 0;
+        background-color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }}
+    th, td {{
+        border: 1px solid #cbd5e0;
+        padding: 10px 14px;
+        text-align: left;
+    }}
+    th {{
+        background-color: #3182ce;
+        color: #ffffff;
+        font-weight: 600;
+    }}
+    tr:nth-child(even) {{
+        background-color: #f7fafc;
+    }}
+    blockquote {{
+        border-left: 4px solid #3182ce;
+        padding-left: 16px;
+        margin-left: 0;
+        color: #4a5568;
+        background-color: #ebf8ff;
+        padding: 12px 16px;
+        border-radius: 4px;
+    }}
+    ul, ol {{
+        padding-left: 28px;
+    }}
+    li {{
+        margin: 6px 0;
+    }}
+    hr {{
+        border: none;
+        border-top: 2px solid #e2e8f0;
+        margin: 32px 0;
+    }}
+    a {{
+        color: #3182ce;
+        text-decoration: none;
+    }}
+    a:hover {{
+        text-decoration: underline;
+    }}
+    .header {{
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 20px;
+        background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+        color: white;
+        border-radius: 12px;
+    }}
+    .header h1 {{
+        color: white;
+        border: none;
+        margin: 0;
+    }}
+    .header p {{
+        margin: 8px 0 0 0;
+        opacity: 0.9;
+    }}
+    @media print {{
+        body {{ background-color: white; margin: 0; padding: 20px; }}
+        .header {{ background: #3182ce !important; -webkit-print-color-adjust: exact; }}
+    }}
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>📘 Manual de Uso — CALC MARKUP</h1>
+    <p>LM - Importing 2U® — Sistema de Gestão e Precificação</p>
+</div>
+{html_body}
+<hr>
+<p style="text-align: center; color: #718096; font-size: 0.9em;">
+    Manual v1.0 — em constante atualização — LM - Importing 2U®
+</p>
+</body>
+</html>"""
+
+    # --- Renderiza as abas no app ---
     nomes_abas = list(secoes.keys())
     abas = st.tabs([f"📄 {nome}" for nome in nomes_abas])
 
@@ -625,14 +771,33 @@ def render_manual():
 
     st.markdown("---")
 
-    # Botão para baixar o manual original
-    st.download_button(
-        label="⬇️ Baixar Manual (Markdown)",
-        data=conteudo.encode("utf-8"),
-        file_name="Manual_CALC_MARKUP.md",
-        mime="text/markdown",
-        use_container_width=True,
-    )
+    # --- Botões de download ---
+    st.markdown("### 📥 Baixar o Manual")
+    st.caption("Escolha o formato ideal para o seu uso:")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.download_button(
+            label="⬇️ Baixar Manual (HTML)",
+            data=html_completo.encode("utf-8"),
+            file_name="Manual_CALC_MARKUP.html",
+            mime="text/html",
+            use_container_width=True,
+            help="Abre com duplo-clique em qualquer navegador, já formatado.",
+        )
+        st.caption("🖥️ **HTML** — abre bonito no navegador")
+
+    with col2:
+        st.download_button(
+            label="⬇️ Baixar Manual (Markdown)",
+            data=conteudo.encode("utf-8"),
+            file_name="Manual_CALC_MARKUP.md",
+            mime="text/markdown",
+            use_container_width=True,
+            help="Formato editável, abre no VSCode ou Bloco de Notas.",
+        )
+        st.caption("✏️ **Markdown** — editável em qualquer editor de texto")
 
     st.caption("💡 Manual v1.0 — em constante atualização.")
 
@@ -640,90 +805,3 @@ def render_manual():
 # ---------------------------------------------------------
 # LOGIN E NAVEGAÇÃO
 # ---------------------------------------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.session_state.role = ""
-
-if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if os.path.exists("abertura.png"):
-            st.image("abertura.png", use_container_width=True)
-        st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>",
-                    unsafe_allow_html=True)
-        st.markdown(
-            "<p style='text-align: center; color: gray;'>LM - Importing 2U® - Gestão de Importação</p>",
-            unsafe_allow_html=True
-        )
-        with st.form("login_form"):
-            user = st.text_input("Usuário", placeholder="admin")
-            pwd = st.text_input("Senha", type="password")
-            if st.form_submit_button("Entrar no Sistema", use_container_width=True):
-                conn = get_connection()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT password, role FROM users WHERE username = ?",
-                    (user.strip(),)
-                )
-                result = cursor.fetchone()
-                conn.close()
-                if result and result[0] == hash_password(pwd):
-                    st.session_state.logged_in = True
-                    st.session_state.username = user
-                    st.session_state.role = result[1]
-                    st.rerun()
-                else:
-                    st.error("Credenciais inválidas.")
-else:
-    with st.sidebar:
-        if os.path.exists("abertura.png"):
-            st.image("abertura.png", use_container_width=True)
-        st.markdown("### CALC MARKUP")
-        st.markdown("**LM - Importing 2U®**")
-        st.markdown(f"👤 **{st.session_state.username}**")
-        st.caption(f"({st.session_state.role})")
-        if st.button("Sair / Trocar Usuário", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.session_state.role = ""
-            st.rerun()
-
-        st.markdown("---")
-        menu = st.radio(
-            "Navegação",
-            ["Início", "Dashboard & Gráficos", "Cadastrar Produto",
-             "Importar CSV", "Produtos",
-             "Calculadora de Formação de Preço", "Simulador de Descontos",
-             "Atacado", "Controle de Estoque", "Relatórios & Exportação",
-             "Configurações", "Usuários & Logs de Auditoria",
-             "📘 Manual"],  # <-- NOVO
-            label_visibility="collapsed"
-        )
-
-    if menu == "Início":
-        render_home()
-    elif menu == "Dashboard & Gráficos":
-        render_dashboard()
-    elif menu == "Cadastrar Produto":
-        render_product_form()
-    elif menu == "Importar CSV":
-        render_csv_import()
-    elif menu == "Produtos":
-        render_products_list()
-    elif menu == "Calculadora de Formação de Preço":
-        render_calculator()
-    elif menu == "Simulador de Descontos":
-        render_discount_simulator()
-    elif menu == "Atacado":
-        render_wholesale()
-    elif menu == "Controle de Estoque":
-        render_stock_control()
-    elif menu == "Relatórios & Exportação":
-        render_reports()
-    elif menu == "Configurações":
-        render_settings()
-    elif menu == "Usuários & Logs de Auditoria":
-        render_audit_logs()
-    elif menu == "📘 Manual":  # <-- NOVO
-        render_manual()
