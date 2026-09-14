@@ -260,3 +260,181 @@ Se nenhum arquivo está carregado, aparece o botão **⬇️ Baixar modelo (CSV)
 | `nan` na coluna SKU | Deixe o dropdown em `(nenhuma)` |
 | Preços zerados | Mapeie corretamente a coluna `preco_venda` |
 | Erros > 0 na simulação | Veja os detalhes e corrija o CSV |
+
+---
+
+## 7. Produtos
+
+### Objetivo
+
+Listar todos os produtos cadastrados, com filtros por categoria.
+
+### Como usar
+
+1. Menu lateral → **Produtos**
+2. Use o dropdown **Filtrar por categoria** para segmentar:
+   - `(todas)` → todos os produtos
+   - `Cameras`, `Cabos_Transparentes`, `Cabos_Coloridos`, `Kits`
+3. Clique nos cabeçalhos das colunas para **ordenar** (crescente ou decrescente)
+4. Role horizontalmente para ver todas as colunas
+
+### Colunas exibidas
+
+| Coluna | Descrição |
+|---|---|
+| `id` | ID interno (auto-incremento) |
+| `nome` | Nome do produto |
+| `sku` | Código único |
+| `custo_unit` | Custo unitário (R$) |
+| `frete_unit` | Frete unitário (R$) |
+| `markup` | Fator de markup |
+| `preco_venda` | Preço de venda (R$) |
+| `categoria` | Categoria do produto |
+| `data_cadastro` | Data em que foi cadastrado |
+
+### Dicas
+
+- Use o filtro para **conferir duplicados** dentro de uma categoria
+- Ordene por `preco_venda` para identificar produtos com preço fora da curva
+- Se um produto não aparece, verifique se a categoria dele está correta
+
+---
+
+## 8. Calculadora de Formação de Preço
+
+### Objetivo
+
+Simular o preço ideal de um produto **sem salvar** no banco de dados.
+
+### Campos disponíveis
+
+| Campo | Descrição |
+|---|---|
+| Custo Base (R$) | Custo de compra do produto |
+| Frete & Embalagem (R$) | Custos logísticos somados |
+| Impostos sobre Venda (%) | Total de impostos sobre a venda |
+| Comissão do Canal (%) | Taxa do marketplace |
+| Rateio Custo Fixo (%) | Rateio de despesas fixas |
+| Lucro Líquido Desejado (%) | Margem desejada |
+
+### Como usar
+
+1. Menu lateral → **Calculadora de Formação de Preço**
+2. Preencha os 6 campos
+3. O resultado aparece em verde automaticamente
+
+### Fórmula
+
+### Exemplo prático
+
+- Custo Base: R$ 5,00
+- Frete & Embalagem: R$ 1,50
+- Impostos: 10%
+- Comissão: 16%
+- Custo Fixo: 5%
+- Lucro Desejado: 25%
+
+**Resultado:**
+
+### Erros comuns
+
+- **"A soma das porcentagens não pode ser ≥ 100%"** → diminua os percentuais
+- **Resultado R$ 0,00** → verifique se o divisor ficou negativo
+
+---
+
+## 9. Simulador de Descontos
+
+### Objetivo
+
+Ver o impacto de um desconto no preço final **em tempo real**.
+
+### Como usar
+
+1. Menu lateral → **Simulador de Descontos**
+2. Digite o **preço de venda atual**
+3. Arraste o **slider** para escolher o desconto (0 a 50%)
+4. Leia o resultado em tempo real
+
+### Exemplo
+
+- Preço atual: R$ 29,90
+- Desconto: 10%
+- **Novo preço: R$ 26,91** (economia de R$ 2,99)
+
+### Dica importante
+
+Antes de aplicar uma promoção, use a **Calculadora de Formação de Preço** para garantir que a margem continua positiva.
+
+---
+
+## 10. Atacado
+
+### Objetivo
+
+Definir regras de desconto por volume (kits maiores).
+
+### Como usar
+
+1. Menu lateral → **Atacado**
+2. Escolha a **variação** no dropdown:
+   - Kit 1 Par
+   - Kit 2 Pares
+   - Kit 4 Pares
+   - Kit 8 Pares
+3. Ajuste o **slider** de desconto (0 a 40%)
+4. Veja a regra configurada na caixa azul
+
+### Observação
+
+Esta página atualmente é apenas **informativa** — não grava a regra no banco.
+
+Para tornar dinâmica (com persistência), seria necessário adicionar uma tabela `regras_atacado` no banco.
+
+---
+
+## 11. Controle de Estoque
+
+### Objetivo
+
+Monitorar estoque e emitir alertas de reposição.
+
+### Como usar
+
+1. Menu lateral → **Controle de Estoque**
+2. Veja o alerta no topo (se houver)
+3. A tabela abaixo é a mesma da página **Produtos**
+
+### Observação
+
+O alerta atual está **fixo no código** (SKU `PROT-TC-04` com estoque baixo). Para tornar dinâmico:
+
+- Seria necessário adicionar coluna `estoque_atual` na tabela `products`
+- E definir um **limite mínimo** por produto
+- Aí o alerta seria calculado automaticamente
+
+---
+
+## 12. Relatórios & Exportação
+
+### Objetivo
+
+Gerar arquivos para conferência, backup ou envio por e-mail.
+
+### Como usar
+
+1. Menu lateral → **Relatórios & Exportação**
+2. Clique no botão **Baixar Tabela de Preços (CSV)**
+3. O arquivo `tabela_lm.csv` é baixado
+
+### Observação
+
+Hoje o botão baixa um CSV **fixo de exemplo** (`id,nome,preco`). Para exportar os dados reais do banco, é necessário implementar a query SQL e gerar o arquivo dinamicamente.
+
+### Ideias futuras de relatórios
+
+- 📊 Tabela completa de produtos (com todos os campos)
+- 💰 Relatório de lucro por categoria
+- 📦 Relatório de estoque baixo
+- 📈 Comparativo de preços entre marketplaces
+- 🧾 Nota fiscal / etiquetas de envio
