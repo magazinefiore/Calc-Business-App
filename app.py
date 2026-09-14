@@ -605,7 +605,8 @@ body {{ font-family: Arial, sans-serif; max-width: 960px; margin: 40px auto; pad
 h1 {{ color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 12px; }}
 h2 {{ color: #2c5282; border-bottom: 2px solid #bee3f8; padding-bottom: 8px; }}
 code {{ background: #edf2f7; color: #c53030; padding: 2px 6px; border-radius: 4px; }}
-pre {{ background: #2d3748; color: #f7fafc; padding: 16px; border-radius: 8px; overflow-x: auto; }}
+pre {{ background: #2d3748; color: #f7fafc; padding: 16px; border-radius: 8px; overflow-x: auto; white-space: pre; font-family: "Consolas", "Monaco", monospace; font-size: 0.9em; }}
+pre code {{ background: transparent; color: inherit; padding: 0; white-space: pre; }}
 table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
 th, td {{ border: 1px solid #cbd5e0; padding: 10px; text-align: left; }}
 th {{ background: #3182ce; color: white; }}
