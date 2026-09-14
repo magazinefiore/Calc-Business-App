@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import hashlib
 import io
-
+from ajudas import ajuda_pagina
 # ---------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
@@ -158,7 +158,14 @@ def to_float(v):
 # PÁGINAS
 # ---------------------------------------------------------
 def render_home():
-    st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
+    def render_home():
+    col_titulo, col_ajuda = st.columns([15, 1])
+    with col_titulo:
+        st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
+    with col_ajuda:
+        ajuda_pagina("inicio")
+    st.markdown("### Sistema de Gestão e Precificação - LM - Importing 2U®")
+    ...
     st.markdown("### Sistema de Gestão e Precificação - LM - Importing 2U®")
     st.markdown("---")
     st.write("Bem-vindo ao painel central de controle.")
@@ -172,7 +179,11 @@ def render_home():
 
 
 def render_dashboard():
-    st.title("📊 Dashboard Executivo & Gráficos")
+    col_titulo, col_ajuda = st.columns([15, 1])
+    with col_titulo:
+        st.title("📊 Dashboard Executivo & Gráficos")
+    with col_ajuda:
+        ajuda_pagina("dashboard")
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM products", conn)
 
