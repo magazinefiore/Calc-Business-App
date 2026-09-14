@@ -158,7 +158,6 @@ def to_float(v):
 # PÁGINAS
 # ---------------------------------------------------------
 def render_home():
-    def render_home():
     col_titulo, col_ajuda = st.columns([15, 1])
     with col_titulo:
         st.title("🏠 Bem-vindo(a) ao CALC MARKUP")
