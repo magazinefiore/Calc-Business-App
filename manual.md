@@ -438,3 +438,300 @@ Hoje o botão baixa um CSV **fixo de exemplo** (`id,nome,preco`). Para exportar 
 - 📦 Relatório de estoque baixo
 - 📈 Comparativo de preços entre marketplaces
 - 🧾 Nota fiscal / etiquetas de envio
+
+- ---
+
+## 13. Configurações
+
+### Objetivo
+
+Ajustar parâmetros globais do sistema.
+
+### Como usar
+
+1. Menu lateral → **Configurações**
+2. Edite os campos:
+   - **Nome da Operação:** atualmente `LM - Importing 2U®`
+   - **Cotação Fixa do Dólar (USD para BRL):** atualmente `5.50`
+3. Clique em **Salvar Configurações**
+
+### Observação
+
+Hoje as configurações **não persistem no banco** — são apenas visuais, ou seja, ao recarregar a página voltam aos valores padrão.
+
+**Melhoria futura sugerida:**
+
+- Criar tabela `configuracoes` no banco
+- Carregar valores ao abrir o app
+- Salvar quando clicar em "Salvar Configurações"
+
+---
+
+## 14. Usuários & Logs de Auditoria
+
+### Objetivo
+
+Gerenciar usuários do sistema e ver registros de atividades.
+
+### Cadastro de Usuários
+
+1. Menu lateral → **Usuários & Logs de Auditoria**
+2. Na aba **👥 Cadastro de Usuários**, preencha:
+   - **Nome de Usuário (Login):** ex `maria`
+   - **Senha:** digite uma senha forte
+   - **Perfil de Acesso:** `Administrador` ou `Operador`
+3. Clique em **Cadastrar Usuário**
+
+### Perfis disponíveis
+
+| Perfil | Descrição |
+|---|---|
+| Administrador | Acesso total (todos os menus) |
+| Operador | Acesso limitado (a definir) |
+
+### Erros comuns
+
+| Erro | Solução |
+|---|---|
+| "Este nome de usuário já existe" | Escolha outro login |
+| "Preencha todos os campos" | Login e senha são obrigatórios |
+
+### Lista de Usuários
+
+Na mesma aba, role para baixo para ver a tabela de **Usuários Cadastrados** com:
+
+- `id`
+- `username`
+- `role`
+- `data_criacao`
+
+### Logs de Auditoria
+
+A aba **📋 Logs de Auditoria** hoje exibe apenas uma mensagem fixa.
+
+**Melhoria futura:**
+
+- Criar tabela `logs` com: data, usuário, ação, IP
+- Registrar automaticamente: logins, cadastros, importações, edições
+- Exibir os últimos 100 registros na aba
+
+---
+
+## 15. Fluxos Recomendados
+
+### 🔄 Fluxo 1 — Cadastro em lote (recomendado)
+
+Para adicionar **muitos produtos de uma vez**:
+
+```
+1. Prepare uma planilha com o formato:
+   nome;categoria;custo_unit;frete_unit;preco_venda
+
+2. Menu lateral → Importar CSV
+
+3. Suba o arquivo .csv ou .xlsx
+
+4. Confira o mapeamento das colunas (já vem pré-selecionado)
+
+5. Confira a prévia com os dados normalizados
+
+6. Clique em 🔍 Simular (dry-run) para validar
+
+7. Se OK → clique em 🚀 Processar Lote
+
+8. Menu → Produtos → validar que apareceram
+
+9. Menu → Dashboard → filtrar por categoria
+```
+
+**Tempo estimado:** 2-3 minutos para dezenas de produtos.
+
+### 🔄 Fluxo 2 — Cadastro individual
+
+Para adicionar **um produto específico**:
+
+```
+1. Menu lateral → Cadastrar Produto
+
+2. Preencha:
+   - Nome, SKU
+   - Custo unitário, Frete internacional
+   - Categoria
+   - Impostos e comissão
+   - Margem de lucro desejada
+
+3. Clique em Salvar e Calcular Preço
+
+4. Menu → Produtos para conferir
+```
+
+**Tempo estimado:** 1-2 minutos por produto.
+
+### 🔄 Fluxo 3 — Simulação de preço
+
+Para **analisar** um produto antes de cadastrar:
+
+```
+1. Menu → Calculadora de Formação de Preço
+
+2. Informe os custos e margens
+
+3. Leia o preço ideal sugerido
+
+4. Menu → Simulador de Descontos
+
+5. Veja o impacto de uma promoção
+
+6. Se gostou → cadastre como produto novo
+```
+
+### 🔄 Fluxo 4 — Auditoria de preços
+
+Para **revisar** os preços praticados:
+
+```
+1. Menu → Produtos
+
+2. Filtre por categoria
+
+3. Ordene por preco_venda (crescente ou decrescente)
+
+4. Verifique se algum produto está com preço fora da curva
+
+5. Menu → Dashboard → compare com a média da categoria
+```
+
+---
+
+## 16. Boas Práticas e Backup
+
+### 🛡️ Backup do banco de dados
+
+**Regra de ouro:** faça backup **antes** de qualquer operação de risco (importação em lote, exclusão de produtos, alteração em massa).
+
+#### Antes de importar:
+
+```bash
+cp database.db database_backup_$(date +%Y%m%d_%H%M).db
+```
+
+Isso cria uma cópia com a data e hora no nome, tipo:
+```
+database_backup_20260913_2149.db
+```
+
+#### Depois de importar com sucesso:
+
+```bash
+cp database.db database_pos_importacao.db
+```
+
+Assim você tem **dois pontos de restauração**:
+- `database_backup_YYYYMMDD_HHMM.db` → antes da importação (limpo)
+- `database_pos_importacao.db` → depois (com os novos dados)
+
+### ✅ Checklist antes de importar
+
+Antes de clicar em **🚀 Processar Lote**:
+
+- [ ] Fiz **backup** do `database.db`
+- [ ] O CSV tem as **colunas corretas**
+- [ ] O encoding é **UTF-8**
+- [ ] Confirmei o **mapeamento das colunas**
+- [ ] Vi a **prévia** e os valores estão corretos
+- [ ] Rodei a **Simulação (dry-run)**
+- [ ] Escolhi o **modo correto** (append ou upsert)
+
+### 🔒 Segurança
+
+- **Troque a senha do admin** no primeiro acesso
+- **Crie usuários individuais** para cada pessoa
+- **Use perfis** apropriados
+- **Faça backup semanal** mesmo sem grandes mudanças
+
+---
+
+## 17. Solução de Problemas (FAQ)
+
+### ❌ `pandas.errors.ParserError`
+
+**Causa:** o separador ou encoding do CSV não foi reconhecido automaticamente.
+
+**Solução:** abra o CSV no Bloco de Notas e veja o separador (`,`, `;`, `\t`). O app tenta 7 combinações.
+
+### ❌ `no such column: categoria` ou `custo_unit`
+
+**Causa:** o banco não foi migrado corretamente.
+
+**Solução:** restaure o backup ou delete o `database.db` e rode o app novamente.
+
+### ❌ Produtos com preços zerados
+
+**Causa:** a coluna `preco_venda` não foi mapeada.
+
+**Solução:** verifique o dropdown de mapeamento e reimporte em modo upsert.
+
+### ❌ Senha do admin esquecida
+
+Execute este script no terminal:
+
+```python
+import sqlite3, hashlib
+conn = sqlite3.connect("database.db")
+nova = hashlib.sha256("novasenha123".encode()).hexdigest()
+conn.execute("UPDATE users SET password = ? WHERE username = 'admin'", (nova,))
+conn.commit()
+conn.close()
+print("Senha do admin redefinida para: novasenha123")
+```
+
+### ❌ App trava ao "Processar Lote"
+
+**Solução:** aguarde 15-30s, atualize (F5), verifique em Produtos. Se ficou pela metade, restaure do backup e divida o CSV em partes menores.
+
+### ❌ Dados sumiram após reiniciar
+
+**Causa:** o `database.db` foi apagado ou substituído.
+
+**Solução:** restaure do backup com `cp database_backup_YYYYMMDD.db database.db`
+
+### ❌ Manual não aparece ou dá erro
+
+**Causa:** o arquivo `manual.md` não está na pasta correta.
+
+**Solução:** confirme que está na mesma pasta do `app.py` e que os títulos usam `## ` (dois sustenidos + espaço).
+
+---
+
+## 🏁 Conclusão
+
+O **CALC MARKUP** é uma ferramenta poderosa para gestão de preços e produtos. Este manual cobriu **todas as funcionalidades** do sistema.
+
+### Sempre que tiver dúvidas:
+
+1. **Consulte este manual** primeiro
+2. **Faça backup** antes de operações de risco
+3. **Use a simulação (dry-run)** antes de importar
+4. **Reporte erros** com prints detalhados
+
+### Melhorias futuras em desenvolvimento:
+
+- 🔑 Geração automática de SKU
+- 📥 Exportar banco → CSV
+- 📜 Logs de auditoria reais
+- ✏️ Edição inline de produtos
+- 📊 Filtros adicionais no Dashboard
+- 📱 Página de detalhe do produto
+- 💾 Backup/restauração via interface
+
+### Contato e suporte
+
+Para dúvidas técnicas ou sugestões de melhorias, entre em contato com o administrador do sistema.
+
+---
+
+**Bom trabalho e boas vendas!** 🚀
+
+---
+
+*Sistema CALC MARKUP v1.0 — LM - Importing 2U® — 13/09/2026*
